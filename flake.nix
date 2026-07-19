@@ -1,3 +1,5 @@
+# https://wiki.nixos.org/wiki/Flakes/en
+# https://wiki.nixos.org/wiki/Development_environment_with_nix-shell
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -13,9 +15,8 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
-        python = pkgs.python3;
-        pythonEnv = python.withPackages (
+        pkgs = import nixpkgs { inherit system; };
+        python = pkgs.python3.withPackages (
           ps: with ps; [
             pytest
           ]
@@ -24,7 +25,7 @@
       {
         devShells.default = pkgs.mkShell {
           packages = [
-            pythonEnv
+            python
             pkgs.just
           ];
         };
