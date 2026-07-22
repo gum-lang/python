@@ -223,11 +223,18 @@ class Tokenizer:
             if ch == "\\":
                 ch = self._read_escape()
                 chars.append(ch)
+            elif ch == "\r":
+                # Normalize CRLF to LF
+                if self.pos < len(self.source) and self.source[self.pos] == "\n":
+                    self._take_char()
+                chars.append("\n")
             else:
                 chars.append(ch)
         raise GumError("Unterminated multiline string", start_line, start_col)
 
     def _dedent_multiline(self, raw: str) -> str:
+        # Normalize any remaining \r\n to \n
+        raw = raw.replace("\r\n", "\n")
         lines = raw.split("\n")
         if not lines:
             return raw

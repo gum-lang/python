@@ -178,3 +178,42 @@ def test_tab_allowed_in_string():
     tok = t.advance()
     assert tok.type == TokenType.STRING
     assert tok.value == "hello\tworld"
+
+
+def test_multiline_string_crlf_normalized():
+    t = Tokenizer('s = """\r\nhello\r\nworld\r\n"""')
+    t.advance()  # s
+    t.advance()  # =
+    tok = t.advance()  # string
+    assert tok.value == "hello\nworld"
+    assert "\r" not in tok.value
+
+
+def test_multiline_string_crlf_with_dedent():
+    src = 's = """\r\n  hello\r\n  world\r\n  """'
+    t = Tokenizer(src)
+    t.advance()  # s
+    t.advance()  # =
+    tok = t.advance()  # string
+    assert tok.value == "hello\nworld"
+    assert "\r" not in tok.value
+
+
+def test_multiline_string_cr_escape_preserved():
+    src = r's = """hello\rworld"""'
+    t = Tokenizer(src)
+    t.advance()  # s
+    t.advance()  # =
+    tok = t.advance()  # string
+    assert tok.value == "hello\rworld"
+    assert "\r" in tok.value
+
+
+def test_multiline_string_bare_cr_normalized():
+    src = 's = """hello\rworld"""'
+    t = Tokenizer(src)
+    t.advance()  # s
+    t.advance()  # =
+    tok = t.advance()  # string
+    assert tok.value == "hello\nworld"
+    assert "\r" not in tok.value
