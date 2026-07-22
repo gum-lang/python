@@ -142,3 +142,9 @@ def test_position_tracking():
     t.advance()
     tok = t.advance()
     assert tok.line == 3
+
+
+def test_invalid_unicode_escape():
+    import pytest
+    with pytest.raises(GumError):
+        Tokenizer(r'"\uGGGG"')

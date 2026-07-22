@@ -261,7 +261,10 @@ class Tokenizer:
                 if self.pos >= len(self.source):
                     raise GumError("Unterminated unicode escape", self.line, self.col)
                 hex_str += self._take_char()
-            return chr(int(hex_str, 16))
+            try:
+                return chr(int(hex_str, 16))
+            except ValueError:
+                raise GumError(f"Invalid unicode escape: \\u{hex_str}", self.line, self.col)
         if ch in mapping:
             return mapping[ch]
         raise GumError(f"Invalid escape sequence: \\{ch}", self.line, self.col)
