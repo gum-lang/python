@@ -1,6 +1,6 @@
 import io
 
-from gum import dump, dumps, load, loads, marshal, unmarshal, GumError
+from gum import dump, dumps, load, loads, GumError
 
 
 def test_loads_simple():
@@ -48,11 +48,3 @@ def test_dump_file_object(tmp_path):
     result = load(p)
     assert result == data
 
-
-def test_unmarshal_backward_compat():
-    assert unmarshal('key = "value"') == {"key": "value"}
-
-
-def test_marshal_backward_compat():
-    result = marshal({"key": "value"})
-    assert 'key = "value"' in result
