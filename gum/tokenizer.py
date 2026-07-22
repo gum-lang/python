@@ -185,6 +185,13 @@ class Tokenizer:
                 ch = self._read_escape()
                 chars.append(ch)
             else:
+                code = ord(ch)
+                if (code <= 0x08 or (0x0A <= code <= 0x1F) or code == 0x7F):
+                    raise GumError(
+                        f"Control character U+{code:04X} must be escaped",
+                        self.line,
+                        self.col - 1,
+                    )
                 chars.append(ch)
         raise GumError("Unterminated string", start_line, start_col)
 

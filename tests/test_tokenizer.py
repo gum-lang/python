@@ -1,3 +1,4 @@
+import pytest
 from gum.tokenizer import Tokenizer, TokenType, GumError
 
 
@@ -130,7 +131,6 @@ def test_reserved_keys():
 
 
 def test_standalone_carriage_return():
-    import pytest
     t = Tokenizer("key\r= 1")
     with pytest.raises(GumError):
         t.advance()
@@ -145,6 +145,36 @@ def test_position_tracking():
 
 
 def test_invalid_unicode_escape():
-    import pytest
     with pytest.raises(GumError):
         Tokenizer(r'"\uGGGG"')
+
+
+def test_reject_bare_control_chars():
+    # Bell character (U+0007)
+    with pytest.raises(GumError):
+        Tokenizer('"hello\x07world"')
+
+
+def test_reject_bare_newline_in_string():
+    # Literal newline (U+000A)
+    with pytest.raises(GumError):
+        Tokenizer('"hello\nworld"')
+
+
+def test_reject_bare_delete_char():
+    # DEL character (U+007F)
+    with pytest.raises(GumError):
+        Tokenizer('"hello\x7fworld"')
+
+
+def test_reject_bare_nul_char():
+    with pytest.raises(GumError):
+        Tokenizer('"hello\x00world"')
+
+
+def test_tab_allowed_in_string():
+    # Tab (U+0009) is explicitly allowed
+    t = Tokenizer('"hello\tworld"')
+    tok = t.advance()
+    assert tok.type == TokenType.STRING
+    assert tok.value == "hello\tworld"
