@@ -1,4 +1,4 @@
-from gum import unmarshal, marshal
+from gum import dumps, loads
 
 
 def test_spec_full_example():
@@ -27,9 +27,7 @@ database = {
 
 description = \"\"\"This is camel.
 It is markup everyone likes.\"\"\""""
-    parsed = unmarshal(src)
-    # TODO: We need to assert values are correctly read
-    # TODO: Waiting on import corrections
-    gum_str = marshal(parsed)
-    reparsed = unmarshal(gum_str)
+    parsed = loads(src)
+    gum_str = dumps(parsed)
+    reparsed = loads(gum_str)
     assert parsed == reparsed
