@@ -15,7 +15,25 @@ def dump(data: dict[str, Any], fp: TextIO, indent: int = 2) -> None
 
 ## Example
 
-TODO
+```python
+import gum
+
+config = gum.loads("""
+name = "my-app"
+version = 1
+
+server.host = "localhost"
+server.port = 8080
+
+features = {
+  debug = true
+  logging = false
+}
+""")
+
+print(config["name"])  # "my-app"
+print(config["server"]["port"])  # 8080
+```
 
 ## Types
 
