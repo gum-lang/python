@@ -237,3 +237,18 @@ def test_negative_number_followed_by_ident():
 def test_number_followed_by_keyword():
     with pytest.raises(GumError):
         Tokenizer("123true")
+
+
+def test_tab_column_tracking():
+    t = Tokenizer("a\t= 1")
+    tok = t.advance()  # 'a' IDENT
+    assert tok.col == 1
+    tok = t.advance()  # skips tab, should be at col 5
+    assert tok.col == 5  # '=' EQUALS
+
+
+def test_tab_in_comment_column_tracking():
+    t = Tokenizer("# comment\t\nkey")
+    t.advance()  # newline after comment
+    tok = t.advance()  # 'key' IDENT
+    assert tok.col == 1  # key starts at col 1 on new line

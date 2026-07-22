@@ -131,12 +131,17 @@ class Tokenizer:
                 self.col,
             )
 
+    def _advance_col_for_tab(self) -> None:
+        self.col = ((self.col - 1) // 4 + 1) * 4 + 1
+
     def _take_char(self) -> str:
         ch = self.source[self.pos]
         self.pos += 1
         if ch == "\n":
             self.line += 1
             self.col = 1
+        elif ch == "\t":
+            self._advance_col_for_tab()
         else:
             self.col += 1
         return ch
@@ -149,16 +154,22 @@ class Tokenizer:
     def _skip_ws_and_comments(self) -> None:
         while self.pos < len(self.source):
             ch = self.source[self.pos]
-            if ch == " " or ch == "\t":
+            if ch == " ":
                 self.pos += 1
                 self.col += 1
+            elif ch == "\t":
+                self.pos += 1
+                self._advance_col_for_tab()
             elif ch == "#":
                 while self.pos < len(self.source):
                     c = self.source[self.pos]
                     if c == "\n" or c == "\r":
                         break
                     self.pos += 1
-                    self.col += 1
+                    if c == "\t":
+                        self._advance_col_for_tab()
+                    else:
+                        self.col += 1
             else:
                 break
 
