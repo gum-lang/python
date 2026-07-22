@@ -209,6 +209,11 @@ def test_multiline_string_cr_escape_preserved():
     assert "\r" in tok.value
 
 
+def test_ident_cannot_start_with_digit():
+    with pytest.raises(GumError):
+        Tokenizer("1key")
+
+
 def test_multiline_string_bare_cr_normalized():
     src = 's = """hello\rworld"""'
     t = Tokenizer(src)
@@ -217,3 +222,18 @@ def test_multiline_string_bare_cr_normalized():
     tok = t.advance()  # string
     assert tok.value == "hello\nworld"
     assert "\r" not in tok.value
+
+
+def test_number_followed_by_underscore():
+    with pytest.raises(GumError):
+        Tokenizer("1_abc")
+
+
+def test_negative_number_followed_by_ident():
+    with pytest.raises(GumError):
+        Tokenizer("-1key")
+
+
+def test_number_followed_by_keyword():
+    with pytest.raises(GumError):
+        Tokenizer("123true")

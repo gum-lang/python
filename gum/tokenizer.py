@@ -120,7 +120,7 @@ class Tokenizer:
         elif ch == '"':
             self._current = self._read_string_or_multiline()
         elif ch == "-" or ("0" <= ch <= "9"):
-            self._current = self._read_number()
+            self._current = self._read_number_or_check_ident()
         elif ("A" <= ch <= "Z") or ("a" <= ch <= "z") or ch == "_":
             self._current = self._read_ident()
         else:
@@ -296,6 +296,19 @@ class Tokenizer:
             while self.pos < len(self.source) and "0" <= self.source[self.pos] <= "9":
                 chars.append(self._take_char())
         return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
+
+    def _read_number_or_check_ident(self) -> Token:
+        start_pos = self.pos
+        num = self._read_number()
+        if self.pos < len(self.source):
+            next_ch = self.source[self.pos]
+            if ("A" <= next_ch <= "Z") or ("a" <= next_ch <= "z") or next_ch == "_":
+                raise GumError(
+                    "Invalid token: number cannot be followed by identifier characters",
+                    num.line,
+                    num.col,
+                )
+        return num
 
     def _read_number_or_dot(self) -> Token:
         start_line = self.line
