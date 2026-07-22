@@ -1,4 +1,5 @@
 import io
+import pytest
 
 from gum import dump, dumps, load, loads, GumError
 
@@ -47,4 +48,26 @@ def test_dump_file_object(tmp_path):
         dump(data, f)
     result = load(p)
     assert result == data
+
+
+def test_load_file_error_includes_filename(tmp_path):
+    p = tmp_path / "bad.gum"
+    p.write_text("key = ")
+    with pytest.raises(GumError) as exc_info:
+        load(p)
+    assert "bad.gum" in str(exc_info.value)
+
+
+def test_load_file_object_error_includes_filename(tmp_path):
+    p = tmp_path / "bad2.gum"
+    p.write_text("key = ")
+    with open(p) as f:
+        with pytest.raises(GumError) as exc_info:
+            load(f)
+    assert "bad2.gum" in str(exc_info.value)
+
+
+def test_load_invalid_input_type():
+    with pytest.raises(TypeError):
+        load(42)  # type: ignore
 

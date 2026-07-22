@@ -33,6 +33,7 @@ class Token:
 
 class GumError(Exception):
     def __init__(self, message: str, line: int, col: int) -> None:
+        self.message = message
         self.line = line
         self.col = col
         super().__init__(f"{message} at line {line}, col {col}")

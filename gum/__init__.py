@@ -21,13 +21,22 @@ def loads(s: str) -> dict[str, Any]:
 
 
 def load(fp: IO[str] | Path) -> dict[str, Any]:
+    filename: str | None = None
     if isinstance(fp, Path):
         source = fp.read_text()
+        filename = str(fp)
     elif hasattr(fp, "read"):
         source = fp.read()
+        if hasattr(fp, "name"):
+            filename = fp.name
     else:
         raise TypeError(f"Expected file-like object or Path, got {type(fp)}")
-    return Parser(Tokenizer(source)).parse()
+    try:
+        return Parser(Tokenizer(source)).parse()
+    except GumError as e:
+        if filename:
+            raise GumError(f"{filename}: {e.message}", e.line, e.col) from e
+        raise
 
 
 def dumps(data: dict[str, Any], indent: int = 2) -> str:
