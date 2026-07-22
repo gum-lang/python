@@ -265,3 +265,24 @@ def test_trailing_comma_document():
 def test_comma_with_dotted_paths():
     result = parse('a.b.c = 1, a.b.d = 2')
     assert result == {"a": {"b": {"c": 1, "d": 2}}}
+
+
+def test_reserved_keyword_true_as_key():
+    import pytest
+    from gum.tokenizer import GumError
+    with pytest.raises(GumError, match="(?i)reserved"):
+        parse("true = 1")
+
+
+def test_reserved_keyword_false_as_key():
+    import pytest
+    from gum.tokenizer import GumError
+    with pytest.raises(GumError, match="(?i)reserved"):
+        parse("false = 1")
+
+
+def test_reserved_keyword_null_as_key():
+    import pytest
+    from gum.tokenizer import GumError
+    with pytest.raises(GumError, match="(?i)reserved"):
+        parse("null = 1")

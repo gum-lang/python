@@ -59,6 +59,8 @@ class Parser:
             return tok.value
         elif tok.type == TokenType.STRING:
             return tok.value
+        elif tok.type in (TokenType.TRUE, TokenType.FALSE, TokenType.NULL):
+            self._error(f"Reserved keyword '{tok.value}' cannot be used as a key")
         else:
             self._error(f"Expected key, got {tok.type.name}({tok.value!r})")
 
