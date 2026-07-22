@@ -46,3 +46,10 @@ def test_roundtrip():
     gum_str = dumps(data)
     parsed = loads(gum_str)
     assert parsed == data
+
+
+def test_multiline_with_triple_quotes_roundtrip():
+    data = {"s": "hello\n\"\"\"world"}
+    gum_str = dumps(data)
+    reparsed = loads(gum_str)
+    assert reparsed == data

@@ -35,7 +35,7 @@ def _serialize_value(value: Any, depth: int, indent: int) -> list[str]:
 
 
 def _serialize_string(value: str) -> str:
-    if "\n" in value:
+    if "\n" in value and '"""' not in value:
         return '"""\n' + value + '"""'
     escaped: list[str] = []
     for ch in value:
