@@ -1,4 +1,4 @@
-![acronym](https://github.com/gum-lang/spec/raw/main/assets/acronym.png)
+![acronym](https://github.com/gum-lang/.github/raw/main/assets/acronym.png)
 
 This is a parser for the [GUM](https://github.com/gum-lang/spec) markup language for Python.
 
@@ -48,4 +48,4 @@ print(config["server"]["port"])  # 8080
 | list        | list                    |
 | record      | dict                    |
 
-![elaine](https://github.com/gum-lang/spec/raw/main/assets/elaine.png)
+![elaine](https://github.com/gum-lang/.github/raw/main/assets/elaine.png)
