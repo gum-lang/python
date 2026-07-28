@@ -267,6 +267,11 @@ def test_comma_with_dotted_paths():
     assert result == {"a": {"b": {"c": 1, "d": 2}}}
 
 
+def test_whitespace_between_assignments():
+    result = parse("a = 1  b = 2")
+    assert result == {"a": 1, "b": 2}
+
+
 def test_reserved_keyword_true_as_key():
     import pytest
     from gum.tokenizer import GumError

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn
 
-from gum.tokenizer import Tokenizer, TokenType, GumError
+from gum.tokenizer import Optional, Token, Tokenizer, TokenType, GumError
 
 
 class Parser:
     def __init__(self, tokenizer: Tokenizer) -> None:
         self.tok = tokenizer
 
-    def _error(self, msg: str) -> None:
+    def _error(self, msg: str) -> NoReturn:
         t = self.tok.peek()
         if t is not None:
             raise GumError(msg, t.line, t.col)
@@ -22,14 +22,14 @@ class Parser:
             self._error("Unexpected end of input")
         return next_token.type
 
-    def _advance(self) -> Tokenizer:
+    def _advance(self) -> Optional[Token]:
         return self.tok.advance()
 
     def _expect(self, *types: TokenType) -> Any:
         return self.tok.expect(*types)
 
     def _skip_newlines(self) -> None:
-        while self._peek() == TokenType.NEWLINE:
+        while self._peek() in (TokenType.NEWLINE, TokenType.WHITESPACE):
             self._advance()
 
     def parse(self) -> dict[str, Any]:
@@ -42,6 +42,7 @@ class Parser:
 
     def _parse_expression(self, target: dict[str, Any]) -> None:
         keys = self._parse_path()
+        self._skip_newlines()
         self._expect(TokenType.EQUALS)
         value = self._parse_value()
         self._assign_path(target, keys, value)
@@ -55,6 +56,11 @@ class Parser:
 
     def _parse_key(self) -> str:
         tok = self._advance()
+        if tok is None:
+            self._error("Unexpected end of input")
+        if tok.value is None:
+            self._error(f"Failed to parse key at line {tok.line}, col {tok.col}")
+
         if tok.type == TokenType.IDENT:
             return tok.value
         elif tok.type == TokenType.STRING:
@@ -65,14 +71,25 @@ class Parser:
             self._error(f"Expected key, got {tok.type.name}({tok.value!r})")
 
     def _parse_value(self) -> Any:
+        self._skip_newlines()
         t = self._peek()
+
         if t == TokenType.STRING:
-            return self._advance().value
+            tok = self._advance()
+            if tok is None:
+                self._error("Unexpected end of input")
+            elif tok.value is None:
+                self._error(f"Failed to parse value at line {tok.line}, col {tok.col}")
+            return tok.value
         elif t == TokenType.NUMBER:
-            raw = self._advance().value
-            if "." in raw:
-                return float(raw)
-            return int(raw)
+            tok = self._advance()
+            if tok is None:
+                self._error("Unexpected end of input")
+            elif tok.value is None:
+                self._error(f"Failed to parse value at line {tok.line}, col {tok.col}")
+            if "." in tok.value:
+                return float(tok.value)
+            return int(tok.value)
         elif t == TokenType.TRUE:
             self._advance()
             return True
@@ -104,9 +121,14 @@ class Parser:
             return
         if self._peek() == TokenType.COMMA:
             self._advance()
-        elif self._peek() != TokenType.NEWLINE:
+            self._skip_newlines()
+        elif self._peek() in (TokenType.NEWLINE, TokenType.WHITESPACE):
+            self._skip_newlines()
+            if self._peek() == TokenType.COMMA:
+                self._advance()
+                self._skip_newlines()
+        else:
             self._error("Expected comma or newline")
-        self._skip_newlines()
 
     def _parse_array(self) -> list[Any]:
         self._expect(TokenType.LBRACKET)
