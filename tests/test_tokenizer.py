@@ -367,3 +367,44 @@ def test_underscore_invalid_trailing():
 def test_underscore_invalid_consecutive():
     with pytest.raises(GumError):
         Tokenizer("1__000")
+
+
+def test_double_sign_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("+-42")
+
+
+def test_empty_hex_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("0x")
+
+
+def test_empty_binary_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("0b")
+
+
+def test_empty_octal_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("0o")
+
+
+def test_negative_hex():
+    t = Tokenizer("-0xFF")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "-0xFF"
+
+
+def test_underscore_in_hex():
+    t = Tokenizer("0xFF_FF")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0xFF_FF"
+
+
+def test_positive_with_underscores():
+    t = Tokenizer("+1_000")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "+1_000"

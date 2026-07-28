@@ -321,7 +321,7 @@ class Tokenizer:
             chars.append(self._take_char())
 
         # Check for negative prefix
-        if self.pos < len(self.source) and self.source[self.pos] == "-":
+        elif self.pos < len(self.source) and self.source[self.pos] == "-":
             chars.append(self._take_char())
 
         # Check for hex, binary, octal prefixes
@@ -347,6 +347,8 @@ class Tokenizer:
                 chars.append(self._take_char())
             else:
                 break
+        if len(chars) <= 2:
+            raise GumError("Hex literal requires at least one digit after 0x", start_line, start_col)
         self._validate_underscores(chars, start_line, start_col)
         return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
 
@@ -360,6 +362,8 @@ class Tokenizer:
                 chars.append(self._take_char())
             else:
                 break
+        if len(chars) <= 2:
+            raise GumError("Binary literal requires at least one digit after 0b", start_line, start_col)
         self._validate_underscores(chars, start_line, start_col)
         return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
 
@@ -373,6 +377,8 @@ class Tokenizer:
                 chars.append(self._take_char())
             else:
                 break
+        if len(chars) <= 2:
+            raise GumError("Octal literal requires at least one digit after 0o", start_line, start_col)
         self._validate_underscores(chars, start_line, start_col)
         return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
 
@@ -381,16 +387,15 @@ class Tokenizer:
         # Integer part
         while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
             chars.append(self._take_char())
+        if len(chars) == 1 and chars[0] in ("+", "-"):
+            raise GumError("Expected digit after sign", start_line, start_col)
         # Fractional part
-        is_float = False
         if self.pos < len(self.source) and self.source[self.pos] == ".":
-            is_float = True
             chars.append(self._take_char())
             while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
                 chars.append(self._take_char())
         # Scientific notation
         if self.pos < len(self.source) and self.source[self.pos] in ("e", "E"):
-            is_float = True
             chars.append(self._take_char())
             if self.pos < len(self.source) and self.source[self.pos] in ("+", "-"):
                 chars.append(self._take_char())
