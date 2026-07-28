@@ -42,9 +42,6 @@ class Parser:
             self._skip_sep({TokenType.EOF})
         return result
 
-    def _register_inline_table(self, keys: tuple[str, ...]) -> None:
-        self._inline_tables.add(keys)
-
     def _register_inline_tables_recursive(self, path: tuple[str, ...], value: Any) -> None:
         if isinstance(value, dict):
             self._inline_tables.add(path)
