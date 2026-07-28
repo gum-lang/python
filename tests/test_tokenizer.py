@@ -275,3 +275,95 @@ def test_bom_stripped():
     tok = t.peek()
     assert tok.type == TokenType.IDENT
     assert tok.value == "key"
+
+
+def test_hex_number():
+    t = Tokenizer("0xFF")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0xFF"
+
+
+def test_binary_number():
+    t = Tokenizer("0b1010")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0b1010"
+
+
+def test_octal_number():
+    t = Tokenizer("0o755")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0o755"
+
+
+def test_hex_uppercase():
+    t = Tokenizer("0XFF")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0XFF"
+
+
+def test_binary_uppercase():
+    t = Tokenizer("0B0101")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0B0101"
+
+
+def test_octal_uppercase():
+    t = Tokenizer("0O644")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0O644"
+
+
+def test_scientific_notation():
+    t = Tokenizer("1e10")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "1e10"
+
+
+def test_scientific_negative():
+    t = Tokenizer("2.5E-3")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "2.5E-3"
+
+
+def test_scientific_explicit_positive():
+    t = Tokenizer("+1.5e+2")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "+1.5e+2"
+
+
+def test_explicit_positive_int():
+    t = Tokenizer("+42")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "+42"
+
+
+def test_underscore_separator():
+    t = Tokenizer("1_000_000")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "1_000_000"
+
+
+def test_underscore_invalid_leading():
+    with pytest.raises(GumError):
+        Tokenizer("_1000")
+
+
+def test_underscore_invalid_trailing():
+    with pytest.raises(GumError):
+        Tokenizer("1000_")
+
+
+def test_underscore_invalid_consecutive():
+    with pytest.raises(GumError):
+        Tokenizer("1__000")

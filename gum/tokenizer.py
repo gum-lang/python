@@ -126,9 +126,15 @@ class Tokenizer:
             self._current = self._read_number_or_dot()
         elif ch == '"':
             self._current = self._read_string_or_multiline()
-        elif ch == "-" or ("0" <= ch <= "9"):
+        elif ch == "-" or ch == "+" or ("0" <= ch <= "9"):
             self._current = self._read_number_or_check_ident()
         elif ("A" <= ch <= "Z") or ("a" <= ch <= "z") or ch == "_":
+            if ch == "_" and self.pos + 1 < len(self.source) and "0" <= self.source[self.pos + 1] <= "9":
+                raise GumError(
+                    "Underscore cannot be leading",
+                    self.line,
+                    self.col,
+                )
             self._current = self._read_ident()
         else:
             raise GumError(
@@ -305,21 +311,115 @@ class Tokenizer:
         raise GumError(f"Invalid escape sequence: \\{ch}", self.line, self.col)
 
     def _read_number(self) -> Token:
+        """Parse a number: int, float, hex, binary, octal, scientific, with optional underscore separators."""
         start_line = self.line
         start_col = self.col
         chars: list[str] = []
-        if self.source[self.pos] == "-":
+
+        # Check for explicit positive prefix
+        if self.pos < len(self.source) and self.source[self.pos] == "+":
             chars.append(self._take_char())
-        while self.pos < len(self.source) and "0" <= self.source[self.pos] <= "9":
+
+        # Check for negative prefix
+        if self.pos < len(self.source) and self.source[self.pos] == "-":
             chars.append(self._take_char())
-        if self.pos < len(self.source) and self.source[self.pos] == ".":
-            chars.append(self._take_char())
-            while self.pos < len(self.source) and "0" <= self.source[self.pos] <= "9":
+
+        # Check for hex, binary, octal prefixes
+        if self.pos + 1 < len(self.source) and self.source[self.pos] == "0":
+            next_ch = self.source[self.pos + 1]
+            if next_ch in ("x", "X"):
+                return self._read_hex(start_line, start_col, chars)
+            elif next_ch in ("b", "B"):
+                return self._read_binary(start_line, start_col, chars)
+            elif next_ch in ("o", "O"):
+                return self._read_octal(start_line, start_col, chars)
+
+        # Decimal number
+        return self._read_decimal(start_line, start_col, chars)
+
+    def _read_hex(self, start_line: int, start_col: int, prefix: list[str]) -> Token:
+        chars = prefix
+        chars.append(self._take_char())  # '0'
+        chars.append(self._take_char())  # 'x' or 'X'
+        while self.pos < len(self.source):
+            ch = self.source[self.pos]
+            if ("0" <= ch <= "9") or ("a" <= ch <= "f") or ("A" <= ch <= "F") or ch == "_":
                 chars.append(self._take_char())
+            else:
+                break
+        self._validate_underscores(chars, start_line, start_col)
         return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
 
+    def _read_binary(self, start_line: int, start_col: int, prefix: list[str]) -> Token:
+        chars = prefix
+        chars.append(self._take_char())  # '0'
+        chars.append(self._take_char())  # 'b' or 'B'
+        while self.pos < len(self.source):
+            ch = self.source[self.pos]
+            if ch in ("0", "1") or ch == "_":
+                chars.append(self._take_char())
+            else:
+                break
+        self._validate_underscores(chars, start_line, start_col)
+        return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
+
+    def _read_octal(self, start_line: int, start_col: int, prefix: list[str]) -> Token:
+        chars = prefix
+        chars.append(self._take_char())  # '0'
+        chars.append(self._take_char())  # 'o' or 'O'
+        while self.pos < len(self.source):
+            ch = self.source[self.pos]
+            if ("0" <= ch <= "7") or ch == "_":
+                chars.append(self._take_char())
+            else:
+                break
+        self._validate_underscores(chars, start_line, start_col)
+        return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
+
+    def _read_decimal(self, start_line: int, start_col: int, prefix: list[str]) -> Token:
+        chars = prefix
+        # Integer part
+        while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
+            chars.append(self._take_char())
+        # Fractional part
+        is_float = False
+        if self.pos < len(self.source) and self.source[self.pos] == ".":
+            is_float = True
+            chars.append(self._take_char())
+            while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
+                chars.append(self._take_char())
+        # Scientific notation
+        if self.pos < len(self.source) and self.source[self.pos] in ("e", "E"):
+            is_float = True
+            chars.append(self._take_char())
+            if self.pos < len(self.source) and self.source[self.pos] in ("+", "-"):
+                chars.append(self._take_char())
+            while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
+                chars.append(self._take_char())
+        self._validate_underscores(chars, start_line, start_col)
+        return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
+
+    def _validate_underscores(self, chars: list[str], start_line: int, start_col: int) -> None:
+        """Validate underscore placement: not leading, trailing, or consecutive."""
+        s = "".join(chars)
+        # Find where the numeric content starts (after optional sign and base prefix)
+        content_start = 0
+        if s and s[0] in ("+", "-"):
+            content_start = 1
+        if content_start < len(s) and s[content_start] == "0" and content_start + 1 < len(s) and s[content_start + 1] in ("x", "X", "b", "B", "o", "O"):
+            content_start += 2
+        content = s[content_start:]
+        if not content:
+            return
+        if content.startswith("_"):
+            raise GumError("Underscore cannot be leading", start_line, start_col)
+        if content.endswith("_"):
+            raise GumError("Underscore cannot be trailing", start_line, start_col)
+        if "__" in content:
+            raise GumError("Underscores cannot be consecutive", start_line, start_col)
+
     def _read_number_or_check_ident(self) -> Token:
-        start_pos = self.pos
+        """Parse a number starting with digit or minus, then verify it's not followed by ident chars."""
         num = self._read_number()
         if self.pos < len(self.source):
             next_ch = self.source[self.pos]
@@ -332,13 +432,15 @@ class Tokenizer:
         return num
 
     def _read_number_or_dot(self) -> Token:
+        """Parse a dot: either start of float (.5) or DOT token."""
         start_line = self.line
         start_col = self.col
         self._take_char()
         if self.pos < len(self.source) and "0" <= self.source[self.pos] <= "9":
             chars: list[str] = ["."]
-            while self.pos < len(self.source) and "0" <= self.source[self.pos] <= "9":
+            while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
                 chars.append(self._take_char())
+            self._validate_underscores(chars, start_line, start_col)
             return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
         return Token(TokenType.DOT, None, start_line, start_col)
 
