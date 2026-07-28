@@ -35,6 +35,7 @@ def _serialize_value(value: Any, depth: int, indent: int) -> list[str]:
 
 
 def _serialize_string(value: str) -> str:
+    """Serialize a string value with spec-defined escapes only."""
     if "\n" in value and '"""' not in value:
         return '"""\n' + value + '"""'
     escaped: list[str] = []
