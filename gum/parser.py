@@ -105,9 +105,7 @@ class Parser:
                 self._error("Unexpected end of input")
             elif tok.value is None:
                 self._error(f"Failed to parse value at line {tok.line}, col {tok.col}")
-            if "." in tok.value:
-                return float(tok.value)
-            return int(tok.value)
+            return self._parse_number_value(tok.value)
         elif t == TokenType.TRUE:
             self._advance()
             return True
@@ -123,6 +121,20 @@ class Parser:
             return self._parse_array()
         else:
             self._error(f"Unexpected token: {t.name}")
+
+    def _parse_number_value(self, s: str) -> int | float:
+        """Convert number token string to int or float per spec rules."""
+        if s.startswith(("0x", "0X", "0b", "0B", "0o", "0O")):
+            base_map = {"0x": 16, "0X": 16, "0b": 2, "0B": 2, "0o": 8, "0O": 8}
+            base = base_map[s[:2]]
+            digits = s[2:].replace("_", "")
+            return int(digits, base)
+        clean = s.lstrip("+-")
+        if "e" in clean or "E" in clean:
+            return float(s.replace("_", ""))
+        if "." in clean:
+            return float(s.replace("_", ""))
+        return int(s.replace("_", ""))
 
     def _parse_table(self) -> dict[str, Any]:
         self._expect(TokenType.LBRACE)

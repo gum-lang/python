@@ -338,3 +338,39 @@ def test_nested_inline_table_subkey_reassignment():
     src = "tbl = { nested = { x = 1 } }\ntbl.nested.x = 2"
     with pytest.raises(GumError, match="(?i)redefin"):
         parse(src)
+
+
+def test_large_int_parsed():
+    """Python handles arbitrary precision ints, so this just verifies parsing."""
+    result = parse("n = 99999999999999999999999")
+    assert result == {"n": 99999999999999999999999}
+
+
+def test_hex_parsed():
+    result = parse("n = 0xFF")
+    assert result == {"n": 255}
+
+
+def test_binary_parsed():
+    result = parse("n = 0b1010")
+    assert result == {"n": 10}
+
+
+def test_octal_parsed():
+    result = parse("n = 0o755")
+    assert result == {"n": 493}
+
+
+def test_scientific_parsed():
+    result = parse("n = 1e10")
+    assert result == {"n": 1e10}
+
+
+def test_explicit_positive_parsed():
+    result = parse("n = +42")
+    assert result == {"n": 42}
+
+
+def test_underscore_number_parsed():
+    result = parse("n = 1_000_000")
+    assert result == {"n": 1000000}
