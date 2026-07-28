@@ -1,4 +1,3 @@
-import io
 import pytest
 
 from gum import dump, dumps, load, loads, GumError
@@ -70,4 +69,11 @@ def test_load_file_object_error_includes_filename(tmp_path):
 def test_load_invalid_input_type():
     with pytest.raises(TypeError):
         load(42)  # type: ignore
+
+
+def test_load_file_with_bom(tmp_path):
+    p = tmp_path / "config.gum"
+    p.write_text("\ufeffkey = \"value\"\n", encoding="utf-8")
+    result = load(p)
+    assert result == {"key": "value"}
 
