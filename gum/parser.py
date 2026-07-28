@@ -149,12 +149,21 @@ class Parser:
     def _assign_path(
         self, target: dict[str, Any], keys: list[str], value: Any
     ) -> None:
+        current = target
         for i, key in enumerate(keys):
             if i == len(keys) - 1:
-                target[key] = value
+                if key in current:
+                    if isinstance(current[key], dict) and not isinstance(value, dict):
+                        self._error(
+                            f"Key path conflict: {key!r} is already a table, cannot be a {type(value).__name__}"
+                        )
+                    self._error(f"Duplicate key: {key!r}")
+                current[key] = value
             else:
-                if key not in target:
-                    target[key] = {}
-                elif not isinstance(target[key], dict):
-                    self._error(f"Cannot set key {key!r}: existing value is not a table")
-                target = target[key]
+                if key not in current:
+                    current[key] = {}
+                elif not isinstance(current[key], dict):
+                    self._error(
+                        f"Key path conflict: {key!r} is already a {type(current[key]).__name__}, cannot be a table"
+                    )
+                current = current[key]

@@ -304,3 +304,19 @@ def test_multiple_whitespace_between_assignments():
 def test_mixed_whitespace_and_newline_between_assignments():
     result = parse("a = 1  \n  b = 2\n  c = 3")
     assert result == {"a": 1, "b": 2, "c": 3}
+
+
+def test_path_conflict_string_to_table():
+    import pytest
+    from gum.tokenizer import GumError
+    src = "name = \"Alice\"\nname.first = \"Bob\""
+    with pytest.raises(GumError, match="(?i)conflict"):
+        parse(src)
+
+
+def test_path_conflict_table_to_string():
+    import pytest
+    from gum.tokenizer import GumError
+    src = "a.b = 1\na = \"hello\""
+    with pytest.raises(GumError, match="(?i)conflict"):
+        parse(src)
