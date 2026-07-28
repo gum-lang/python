@@ -49,3 +49,26 @@ print(config["server"]["port"])  # 8080
 | record      | dict                    |
 
 ![elaine](https://github.com/gum-lang/.github/raw/main/assets/elaine.png)
+
+## Conformance
+
+This library is tested against the [gum-test-suite](https://github.com/gum-lang/gum-test-suite) conformance test suite. Tests are included as a git submodule under `tests/conformance/`.
+
+Run conformance tests:
+
+```bash
+pytest tests/test_conformance.py -v
+```
+
+Run all tests (unit + conformance):
+
+```bash
+pytest tests/ -v
+```
+
+Update the test suite:
+
+```bash
+git submodule update --remote tests/conformance
+```
+

@@ -53,3 +53,17 @@ def test_multiline_with_triple_quotes_roundtrip():
     gum_str = dumps(data)
     reparsed = loads(gum_str)
     assert reparsed == data
+
+
+def test_no_forward_slash_escape():
+    result = dumps({"url": "https://example.com"})
+    assert "\\/" not in result
+    assert "/" in result
+
+
+def test_multiline_string_roundtrip():
+    data = {"s": "hello\nworld"}
+    gum_str = dumps(data)
+    assert '"""' in gum_str
+    reparsed = loads(gum_str)
+    assert reparsed == data

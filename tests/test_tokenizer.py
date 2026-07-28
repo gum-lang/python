@@ -1,5 +1,6 @@
 import pytest
 from gum.tokenizer import Tokenizer, TokenType, GumError
+from gum._errors import GumDecodeError
 
 
 def test_empty():
@@ -161,10 +162,12 @@ def test_reject_bare_newline_in_string():
         Tokenizer('"hello\nworld"')
 
 
-def test_reject_bare_delete_char():
-    # DEL character (U+007F)
-    with pytest.raises(GumError):
-        Tokenizer('"hello\x7fworld"')
+def test_del_allowed_in_string():
+    """ABNF unescaped includes %x5D-10FFFF which covers DEL (0x7F)."""
+    t = Tokenizer('"hello\x7fworld"')
+    tok = t.peek()
+    assert tok.type == TokenType.STRING
+    assert tok.value == "hello\x7fworld"
 
 
 def test_reject_bare_nul_char():
@@ -180,10 +183,18 @@ def test_tab_allowed_in_string():
     assert tok.value == "hello\tworld"
 
 
+def test_reject_bare_cr_in_multiline_string():
+    """ABNF unescaped-ml excludes CR; only CRLF via nl rule is permitted."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\rworld"""')
+
+
 def test_multiline_string_crlf_normalized():
     t = Tokenizer('s = """\r\nhello\r\nworld\r\n"""')
     t.advance()  # s
+    t.advance()  # whitespace
     t.advance()  # =
+    t.advance()  # whitespace
     tok = t.advance()  # string
     assert tok.value == "hello\nworld"
     assert "\r" not in tok.value
@@ -193,7 +204,9 @@ def test_multiline_string_crlf_with_dedent():
     src = 's = """\r\n  hello\r\n  world\r\n  """'
     t = Tokenizer(src)
     t.advance()  # s
+    t.advance()  # whitespace
     t.advance()  # =
+    t.advance()  # whitespace
     tok = t.advance()  # string
     assert tok.value == "hello\nworld"
     assert "\r" not in tok.value
@@ -203,7 +216,9 @@ def test_multiline_string_cr_escape_preserved():
     src = r's = """hello\rworld"""'
     t = Tokenizer(src)
     t.advance()  # s
+    t.advance()  # whitespace
     t.advance()  # =
+    t.advance()  # whitespace
     tok = t.advance()  # string
     assert tok.value == "hello\rworld"
     assert "\r" in tok.value
@@ -214,14 +229,15 @@ def test_ident_cannot_start_with_digit():
         Tokenizer("1key")
 
 
-def test_multiline_string_bare_cr_normalized():
-    src = 's = """hello\rworld"""'
-    t = Tokenizer(src)
-    t.advance()  # s
-    t.advance()  # =
-    tok = t.advance()  # string
-    assert tok.value == "hello\nworld"
-    assert "\r" not in tok.value
+def test_multiline_string_bare_cr_rejected():
+    """Bare CR (not followed by LF) is rejected in multiline strings."""
+    t = Tokenizer('s = """hello\rworld"""')
+    with pytest.raises(GumError):
+        t.advance()  # s
+        t.advance()  # whitespace
+        t.advance()  # =
+        t.advance()  # whitespace
+        t.advance()  # string (raises)
 
 
 def test_number_followed_by_underscore():
@@ -243,8 +259,9 @@ def test_tab_column_tracking():
     t = Tokenizer("a\t= 1")
     tok = t.advance()  # 'a' IDENT
     assert tok.col == 1
-    tok = t.advance()  # skips tab, should be at col 5
-    assert tok.col == 5  # '=' EQUALS
+    t.advance()  # tab WHITESPACE
+    tok = t.advance()  # '=' EQUALS
+    assert tok.col == 5
 
 
 def test_tab_in_comment_column_tracking():
@@ -252,3 +269,337 @@ def test_tab_in_comment_column_tracking():
     t.advance()  # newline after comment
     tok = t.advance()  # 'key' IDENT
     assert tok.col == 1  # key starts at col 1 on new line
+
+
+def test_whitespace_token():
+    t = Tokenizer("  \t  key")
+    tok = t.peek()
+    assert tok.type == TokenType.WHITESPACE
+    assert tok.value == "  \t  "
+
+
+def test_hex_number():
+    t = Tokenizer("0xFF")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0xFF"
+
+
+def test_binary_number():
+    t = Tokenizer("0b1010")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0b1010"
+
+
+def test_octal_number():
+    t = Tokenizer("0o755")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0o755"
+
+
+def test_hex_uppercase():
+    t = Tokenizer("0XFF")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0XFF"
+
+
+def test_binary_uppercase():
+    t = Tokenizer("0B0101")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0B0101"
+
+
+def test_octal_uppercase():
+    t = Tokenizer("0O644")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0O644"
+
+
+def test_scientific_notation():
+    t = Tokenizer("1e10")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "1e10"
+
+
+def test_scientific_negative():
+    t = Tokenizer("2.5E-3")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "2.5E-3"
+
+
+def test_scientific_explicit_positive():
+    t = Tokenizer("+1.5e+2")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "+1.5e+2"
+
+
+def test_explicit_positive_int():
+    t = Tokenizer("+42")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "+42"
+
+
+def test_underscore_starting_bare_key():
+    """ABNF bare-key allows UNDERSCORE as first char, followed by anything."""
+    t = Tokenizer("_1")
+    tok = t.peek()
+    assert tok.type == TokenType.IDENT
+    assert tok.value == "_1"
+
+
+def test_underscore_starting_bare_key_multiple_digits():
+    t = Tokenizer("_42")
+    tok = t.peek()
+    assert tok.type == TokenType.IDENT
+    assert tok.value == "_42"
+
+
+def test_underscore_only_bare_key():
+    t = Tokenizer("_")
+    tok = t.peek()
+    assert tok.type == TokenType.IDENT
+    assert tok.value == "_"
+
+
+def test_underscore_separator():
+    t = Tokenizer("1_000_000")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "1_000_000"
+
+
+def test_underscore_starting_ident():
+    """ABNF bare-key allows UNDERSCORE followed by DIGIT."""
+    t = Tokenizer("_1000")
+    tok = t.peek()
+    assert tok.type == TokenType.IDENT
+    assert tok.value == "_1000"
+
+
+def test_underscore_invalid_trailing():
+    with pytest.raises(GumError):
+        Tokenizer("1000_")
+
+
+def test_underscore_invalid_consecutive():
+    with pytest.raises(GumError):
+        Tokenizer("1__000")
+
+
+def test_double_sign_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("+-42")
+
+
+def test_empty_hex_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("0x")
+
+
+def test_empty_binary_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("0b")
+
+
+def test_empty_octal_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("0o")
+
+
+def test_negative_hex():
+    t = Tokenizer("-0xFF")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "-0xFF"
+
+
+def test_underscore_in_hex():
+    t = Tokenizer("0xFF_FF")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "0xFF_FF"
+
+
+def test_reject_forward_slash_escape():
+    with pytest.raises(GumError):
+        Tokenizer(r'"hello\/world"')
+
+
+def test_multiline_dedent_spec():
+    """Spec algorithm: min indentation of non-empty lines, spaces only."""
+    src = 's = """\n      "Did you ever hear the Tragedy of Darth Plagueis the Wise?"\n      "No."\n      "I thought not."\n"""'
+    t = Tokenizer(src)
+    t.advance()  # s
+    t.advance()  # whitespace
+    t.advance()  # =
+    t.advance()  # whitespace
+    tok = t.advance()  # string
+    assert tok.value == '"Did you ever hear the Tragedy of Darth Plagueis the Wise?"\n"No."\n"I thought not."'
+
+
+def test_multiline_dedent_no_leading_newline():
+    src = 's = """hello\n  world\n"""'
+    t = Tokenizer(src)
+    t.advance()  # s
+    t.advance()  # whitespace
+    t.advance()  # =
+    t.advance()  # whitespace
+    tok = t.advance()  # string
+    assert tok.value == "hello\n  world"
+
+
+def test_multiline_dedent_tabs_not_indentation():
+    """Tabs are treated as content, not indentation."""
+    src = 's = """\n\thello\n\tworld\n"""'
+    t = Tokenizer(src)
+    t.advance()  # s
+    t.advance()  # whitespace
+    t.advance()  # =
+    t.advance()  # whitespace
+    tok = t.advance()  # string
+    assert tok.value == "\thello\n\tworld"
+
+
+def test_positive_with_underscores():
+    t = Tokenizer("+1_000")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "+1_000"
+
+
+def test_reject_nul_in_multiline_string():
+    """ABNF unescaped-ml excludes NUL (U+0000)."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\x00world"""')
+
+
+def test_reject_backspace_in_multiline_string():
+    """ABNF unescaped-ml excludes BS (U+0008)."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\x08world"""')
+
+
+def test_reject_vt_in_multiline_string():
+    """ABNF unescaped-ml excludes VT (U+000B)."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\x0bworld"""')
+
+
+def test_reject_ff_in_multiline_string():
+    """ABNF unescaped-ml excludes FF (U+000C)."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\x0cworld"""')
+
+
+def test_reject_soh_in_multiline_string():
+    """ABNF unescaped-ml excludes SOH (U+0001)."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\x01world"""')
+
+
+def test_tab_allowed_in_multiline_string():
+    """ABNF unescaped-ml explicitly allows HTAB."""
+    t = Tokenizer('"""hello\tworld"""')
+    tok = t.peek()
+    assert tok.type == TokenType.STRING
+    assert tok.value == "hello\tworld"
+
+
+def test_del_allowed_in_multiline_string():
+    """ABNF unescaped-ml includes %x5D-10FFFF which covers DEL (0x7F)."""
+    t = Tokenizer('"""hello\x7fworld"""')
+    tok = t.peek()
+    assert tok.type == TokenType.STRING
+    assert tok.value == "hello\x7fworld"
+
+
+def test_incomplete_exponent_rejected():
+    """ABNF exp requires dec-digits (at least one digit) after e/E."""
+    with pytest.raises(GumError):
+        Tokenizer("2e")
+
+
+def test_incomplete_exponent_with_sign_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("2e+")
+
+
+def test_incomplete_exponent_negative_sign_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("2e-")
+
+
+def test_underscore_before_dot_rejected():
+    """ABNF dec-digits: _ must be followed by digit, not dot."""
+    with pytest.raises(GumError):
+        Tokenizer("1_.2")
+
+
+def test_underscore_before_exp_rejected():
+    """ABNF dec-digits: _ must be followed by digit, not e."""
+    with pytest.raises(GumError):
+        Tokenizer("1_e5")
+
+
+def test_underscore_after_dot_rejected():
+    """ABNF dec-digits: first char after dot must be digit, not _."""
+    with pytest.raises(GumError):
+        Tokenizer("1._2")
+
+
+def test_underscore_before_exp_in_frac_rejected():
+    """ABNF dec-digits in frac: _ must be followed by digit, not e."""
+    with pytest.raises(GumError):
+        Tokenizer("1.2_e5")
+
+
+def test_underscore_after_exp_sign_rejected():
+    """ABNF dec-digits in exp: first char after e/sign must be digit, not _."""
+    with pytest.raises(GumError):
+        Tokenizer("2e_5")
+
+
+def test_valid_underscore_in_decimal():
+    """Valid underscore placement in all segments."""
+    t = Tokenizer("1_000.2_5e1_0")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "1_000.2_5e1_0"
+
+
+def test_reject_nul_in_comment():
+    """ABNF comment-char excludes NUL (U+0000)."""
+    with pytest.raises(GumError):
+        Tokenizer("# comment\x00here\nkey")
+
+
+def test_reject_bs_in_comment():
+    """ABNF comment-char excludes BS (U+0008)."""
+    with pytest.raises(GumError):
+        Tokenizer("# comment\x08here\nkey")
+
+
+def test_reject_vt_in_comment():
+    """ABNF comment-char excludes VT (U+000B)."""
+    with pytest.raises(GumError):
+        Tokenizer("# comment\x0bhere\nkey")
+
+
+def test_tab_allowed_in_comment():
+    """ABNF comment-char explicitly allows HTAB."""
+    t = Tokenizer("# comment\there\nkey")
+    assert t.peek().type == TokenType.NEWLINE
+    t.advance()
+    assert t.peek().type == TokenType.IDENT
+
+
+

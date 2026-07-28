@@ -1,15 +1,31 @@
+"""Recursive descent parser for the gum configuration file format.
+
+Consumes tokens from the Tokenizer and produces a nested dict structure.
+Handles:
+- Assignments with comma/newline separators
+- Dotted path keys (e.g., a.b.c = 1)
+- Tables ({}) and lists ([])
+- Semantic validation: duplicate keys, path conflicts, table redefinition
+
+Stops on first error (no recovery).
+"""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, NoReturn, Optional
 
-from gum.tokenizer import Tokenizer, TokenType, GumError
+from gum.tokenizer import Token, Tokenizer, TokenType, GumError
 
 
 class Parser:
-    def __init__(self, tokenizer: Tokenizer) -> None:
-        self.tok = tokenizer
+    """Recursive descent parser that converts token stream to nested dict."""
 
-    def _error(self, msg: str) -> None:
+    def __init__(self, tokenizer: Tokenizer) -> None:
+        """Initialize parser with a Tokenizer instance."""
+        self.tok = tokenizer
+        self._inline_tables: set[tuple[str, ...]] = set()
+
+    def _error(self, msg: str) -> NoReturn:
+        """Raise a GumError at the current token position."""
         t = self.tok.peek()
         if t is not None:
             raise GumError(msg, t.line, t.col)
@@ -17,36 +33,56 @@ class Parser:
             raise GumError(msg, 0, 0)
 
     def _peek(self) -> TokenType:
+        """Return the type of the next token, erroring on EOF."""
         next_token = self.tok.peek()
         if next_token is None:
             self._error("Unexpected end of input")
         return next_token.type
 
-    def _advance(self) -> Tokenizer:
+    def _advance(self) -> Optional[Token]:
         return self.tok.advance()
 
     def _expect(self, *types: TokenType) -> Any:
         return self.tok.expect(*types)
 
-    def _skip_newlines(self) -> None:
-        while self._peek() == TokenType.NEWLINE:
+    def _skip_separators(self) -> None:
+        while self._peek() in (TokenType.NEWLINE, TokenType.WHITESPACE):
             self._advance()
 
     def parse(self) -> dict[str, Any]:
         result: dict[str, Any] = {}
-        self._skip_newlines()
+        seen_keys: set[str] = set()
+        self._skip_separators()
         while self._peek() != TokenType.EOF:
-            self._parse_expression(result)
+            self._parse_expression(result, seen_keys, path_prefix=())
             self._skip_sep({TokenType.EOF})
         return result
 
-    def _parse_expression(self, target: dict[str, Any]) -> None:
+    def _register_inline_tables_recursive(self, path: tuple[str, ...], value: Any) -> None:
+        if isinstance(value, dict):
+            self._inline_tables.add(path)
+            for key, val in value.items():
+                self._register_inline_tables_recursive(path + (key,), val)
+
+    def _parse_expression(self, target: dict[str, Any], seen_keys: set[str], path_prefix: tuple[str, ...] = ()) -> None:
         keys = self._parse_path()
+        self._skip_separators()
         self._expect(TokenType.EQUALS)
         value = self._parse_value()
+        full_path = path_prefix + tuple(keys)
+        if len(keys) == 1 and keys[0] in seen_keys:
+            # Check if existing is an inline table being replaced
+            if full_path in self._inline_tables:
+                self._error(f"Cannot redefine inline table at {keys[0]!r}")
+            self._error(f"Duplicate key: {keys[0]!r}")
+        if len(keys) == 1:
+            seen_keys.add(keys[0])
         self._assign_path(target, keys, value)
+        if isinstance(value, dict):
+            self._register_inline_tables_recursive(full_path, value)
 
     def _parse_path(self) -> list[str]:
+        """Parse a dotted key path (e.g., 'a.b.c' -> ['a', 'b', 'c'])."""
         keys = [self._parse_key()]
         while self._peek() == TokenType.DOT:
             self._advance()
@@ -54,7 +90,13 @@ class Parser:
         return keys
 
     def _parse_key(self) -> str:
+        """Parse a single key segment (identifier or string, rejecting keywords)."""
         tok = self._advance()
+        if tok is None:
+            self._error("Unexpected end of input")
+        if tok.value is None:
+            self._error(f"Failed to parse key at line {tok.line}, col {tok.col}")
+
         if tok.type == TokenType.IDENT:
             return tok.value
         elif tok.type == TokenType.STRING:
@@ -65,14 +107,24 @@ class Parser:
             self._error(f"Expected key, got {tok.type.name}({tok.value!r})")
 
     def _parse_value(self) -> Any:
+        """Parse the next value token into a Python object."""
+        self._skip_separators()
         t = self._peek()
+
         if t == TokenType.STRING:
-            return self._advance().value
+            tok = self._advance()
+            if tok is None:
+                self._error("Unexpected end of input")
+            elif tok.value is None:
+                self._error(f"Failed to parse value at line {tok.line}, col {tok.col}")
+            return tok.value
         elif t == TokenType.NUMBER:
-            raw = self._advance().value
-            if "." in raw:
-                return float(raw)
-            return int(raw)
+            tok = self._advance()
+            if tok is None:
+                self._error("Unexpected end of input")
+            elif tok.value is None:
+                self._error(f"Failed to parse value at line {tok.line}, col {tok.col}")
+            return self._parse_number_value(tok.value)
         elif t == TokenType.TRUE:
             self._advance()
             return True
@@ -89,12 +141,31 @@ class Parser:
         else:
             self._error(f"Unexpected token: {t.name}")
 
+    def _parse_number_value(self, s: str) -> int | float:
+        """Convert number token string to int or float per spec rules."""
+        clean = s.lstrip("+-")
+        if clean.startswith(("0x", "0X", "0b", "0B", "0o", "0O")):
+            base_map = {"0x": 16, "0X": 16, "0b": 2, "0B": 2, "0o": 8, "0O": 8}
+            base = base_map[clean[:2]]
+            digits = clean[2:].replace("_", "")
+            result = int(digits, base)
+            if s.startswith("-"):
+                return -result
+            return result
+        if "e" in clean or "E" in clean:
+            return float(s.replace("_", ""))
+        if "." in clean:
+            return float(s.replace("_", ""))
+        return int(s.replace("_", ""))
+
     def _parse_table(self) -> dict[str, Any]:
+        """Parse an inline table enclosed in { }."""
         self._expect(TokenType.LBRACE)
         result: dict[str, Any] = {}
-        self._skip_newlines()
+        seen_keys: set[str] = set()
+        self._skip_separators()
         while self._peek() not in (TokenType.RBRACE, TokenType.EOF):
-            self._parse_expression(result)
+            self._parse_expression(result, seen_keys, path_prefix=())
             self._skip_sep({TokenType.RBRACE})
         self._expect(TokenType.RBRACE)
         return result
@@ -104,14 +175,20 @@ class Parser:
             return
         if self._peek() == TokenType.COMMA:
             self._advance()
-        elif self._peek() != TokenType.NEWLINE:
+            self._skip_separators()
+        elif self._peek() in (TokenType.NEWLINE, TokenType.WHITESPACE):
+            self._skip_separators()
+            if self._peek() == TokenType.COMMA:
+                self._advance()
+                self._skip_separators()
+        else:
             self._error("Expected comma or newline")
-        self._skip_newlines()
 
     def _parse_array(self) -> list[Any]:
+        """Parse an array literal enclosed in [ ]."""
         self._expect(TokenType.LBRACKET)
         result: list[Any] = []
-        self._skip_newlines()
+        self._skip_separators()
         while self._peek() not in (TokenType.RBRACKET, TokenType.EOF):
             result.append(self._parse_value())
             self._skip_sep({TokenType.RBRACKET})
@@ -121,12 +198,35 @@ class Parser:
     def _assign_path(
         self, target: dict[str, Any], keys: list[str], value: Any
     ) -> None:
+        """Assign a value at a nested path, detecting duplicate keys and type conflicts.
+
+        Walks the key path, creating intermediate dicts as needed.
+        Raises on duplicate keys, type mismatches, or inline table redefinition.
+        """
+        current = target
         for i, key in enumerate(keys):
+            full_path_so_far = tuple(keys[:i+1])
+            parent_path = tuple(keys[:i])
             if i == len(keys) - 1:
-                target[key] = value
+                if key in current:
+                    # Check if existing is an inline table being replaced
+                    if full_path_so_far in self._inline_tables:
+                        self._error(f"Cannot redefine inline table at {key!r}")
+                    # Check if we're trying to redefine a sub-key of an inline table
+                    if parent_path in self._inline_tables:
+                        self._error(f"Cannot redefine sub-key of inline table at {key!r}")
+                    # Check type conflict: existing dict being replaced by non-dict
+                    if isinstance(current[key], dict) and not isinstance(value, dict):
+                        self._error(
+                            f"Key path conflict: {key!r} is already a table, cannot be a {type(value).__name__}"
+                        )
+                    self._error(f"Duplicate key: {key!r}")
+                current[key] = value
             else:
-                if key not in target:
-                    target[key] = {}
-                elif not isinstance(target[key], dict):
-                    self._error(f"Cannot set key {key!r}: existing value is not a table")
-                target = target[key]
+                if key not in current:
+                    current[key] = {}
+                elif not isinstance(current[key], dict):
+                    self._error(
+                        f"Key path conflict: {key!r} is already a {type(current[key]).__name__}, cannot be a table"
+                    )
+                current = current[key]

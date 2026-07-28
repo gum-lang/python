@@ -1,5 +1,6 @@
 from gum.parser import Parser
-from gum.tokenizer import Tokenizer
+from gum.tokenizer import Tokenizer, GumError
+import pytest
 
 
 def parse(src):
@@ -154,13 +155,12 @@ def test_empty_array():
     assert parse("a = []") == {"a": []}
 
 
-def test_duplicate_key_overwrites():
-    assert parse("a = 1\na = 2") == {"a": 2}
+def test_duplicate_key_error():
+    with pytest.raises(GumError, match="(?i)duplicate"):
+        parse("a = 1\na = 2")
 
 
 def test_type_conflict_dotted_path():
-    import pytest
-    from gum.tokenizer import GumError
     src = "a = 1\na.b = 2"
     with pytest.raises(GumError):
         parse(src)
@@ -267,22 +267,355 @@ def test_comma_with_dotted_paths():
     assert result == {"a": {"b": {"c": 1, "d": 2}}}
 
 
+def test_whitespace_between_assignments():
+    result = parse("a = 1  b = 2")
+    assert result == {"a": 1, "b": 2}
+
+
 def test_reserved_keyword_true_as_key():
-    import pytest
-    from gum.tokenizer import GumError
     with pytest.raises(GumError, match="(?i)reserved"):
         parse("true = 1")
 
 
 def test_reserved_keyword_false_as_key():
-    import pytest
-    from gum.tokenizer import GumError
     with pytest.raises(GumError, match="(?i)reserved"):
         parse("false = 1")
 
 
 def test_reserved_keyword_null_as_key():
-    import pytest
-    from gum.tokenizer import GumError
     with pytest.raises(GumError, match="(?i)reserved"):
         parse("null = 1")
+
+
+def test_multiple_whitespace_between_assignments():
+    result = parse("a = 1     b = 2     c = 3")
+    assert result == {"a": 1, "b": 2, "c": 3}
+
+
+def test_mixed_whitespace_and_newline_between_assignments():
+    result = parse("a = 1  \n  b = 2\n  c = 3")
+    assert result == {"a": 1, "b": 2, "c": 3}
+
+
+def test_path_conflict_string_to_table():
+    src = "name = \"Alice\"\nname.first = \"Bob\""
+    with pytest.raises(GumError, match="(?i)conflict"):
+        parse(src)
+
+
+def test_path_conflict_table_to_string():
+    src = "a.b = 1\na = \"hello\""
+    with pytest.raises(GumError, match="(?i)conflict"):
+        parse(src)
+
+
+def test_path_conflict_table_to_table():
+    src = "a.b = 1\na = {}"
+    with pytest.raises(GumError, match="(?i)duplicate"):
+        parse(src)
+
+
+def test_inline_table_subkey_reassignment():
+    src = "tbl = { x = 1 }\ntbl.x = 2"
+    with pytest.raises(GumError, match="(?i)redefin"):
+        parse(src)
+
+
+def test_inline_table_replacement():
+    src = "tbl = { x = 1 }\ntbl = 2"
+    with pytest.raises(GumError, match="(?i)redefin"):
+        parse(src)
+
+
+def test_adding_subkey_to_inline_table():
+    """Adding new sub-keys to existing table is allowed."""
+    result = parse("tbl = { x = 1 }\ntbl.y = 2")
+    assert result == {"tbl": {"x": 1, "y": 2}}
+
+
+def test_nested_inline_table_subkey_reassignment():
+    """Nested inline tables should also be protected from redefinition."""
+    src = "tbl = { nested = { x = 1 } }\ntbl.nested.x = 2"
+    with pytest.raises(GumError, match="(?i)redefin"):
+        parse(src)
+
+
+def test_large_int_parsed():
+    """Python handles arbitrary precision ints, so this just verifies parsing."""
+    result = parse("n = 99999999999999999999999")
+    assert result == {"n": 99999999999999999999999}
+
+
+def test_hex_parsed():
+    result = parse("n = 0xFF")
+    assert result == {"n": 255}
+
+
+def test_binary_parsed():
+    result = parse("n = 0b1010")
+    assert result == {"n": 10}
+
+
+def test_octal_parsed():
+    result = parse("n = 0o755")
+    assert result == {"n": 493}
+
+
+def test_scientific_parsed():
+    result = parse("n = 1e10")
+    assert result == {"n": 1e10}
+
+
+def test_explicit_positive_parsed():
+    result = parse("n = +42")
+    assert result == {"n": 42}
+
+
+def test_underscore_number_parsed():
+    result = parse("n = 1_000_000")
+    assert result == {"n": 1000000}
+
+
+def test_negative_hex():
+    result = parse("n = -0xFF")
+    assert result == {"n": -255}
+
+
+def test_negative_binary():
+    result = parse("n = -0b1010")
+    assert result == {"n": -10}
+
+
+def test_negative_octal():
+    result = parse("n = -0o755")
+    assert result == {"n": -493}
+
+
+def test_crlf_newlines():
+    src = "a = 1\r\nb = 2"
+    result = parse(src)
+    assert result == {"a": 1, "b": 2}
+
+
+def test_inline_comment():
+    src = 'key = "value" # this is a comment'
+    result = parse(src)
+    assert result == {"key": "value"}
+
+
+def test_inline_comment_after_number():
+    src = "count = 42 # items"
+    result = parse(src)
+    assert result == {"count": 42}
+
+
+def test_whitespace_around_dots_not_supported():
+    """Whitespace around dots is tokenized as separate DOT tokens; parser expects key after dot."""
+    with pytest.raises(GumError):
+        parse("a . b . c = 1")
+
+
+def test_empty_string_value():
+    result = parse('s = ""')
+    assert result == {"s": ""}
+
+
+def test_multiple_consecutive_newlines():
+    src = "a = 1\n\n\nb = 2"
+    result = parse(src)
+    assert result == {"a": 1, "b": 2}
+
+
+def test_escape_backslash():
+    result = parse(r'p = "C:\\path\\to\\file"')
+    assert result == {"p": "C:\\path\\to\\file"}
+
+
+def test_escape_backspace():
+    result = parse(r's = "hello\bworld"')
+    assert result == {"s": "hello\bworld"}
+
+
+def test_escape_formfeed():
+    result = parse(r's = "hello\fworld"')
+    assert result == {"s": "hello\fworld"}
+
+
+def test_escape_carriage_return():
+    result = parse(r's = "hello\rworld"')
+    assert result == {"s": "hello\rworld"}
+
+
+def test_escape_tab():
+    result = parse(r's = "hello\tworld"')
+    assert result == {"s": "hello\tworld"}
+
+
+def test_escape_quote():
+    result = parse(r's = "say \"hello\""')
+    assert result == {"s": 'say "hello"'}
+
+
+def test_quoted_key_with_period():
+    result = parse('"foo.bar" = 1')
+    assert result == {"foo.bar": 1}
+
+
+def test_quoted_key_in_dotted_path():
+    result = parse('a."b.c".d = 1')
+    assert result == {"a": {"b.c": {"d": 1}}}
+
+
+def test_dotted_key_whitespace_around_dots_quoted_not_supported():
+    """Whitespace around dots is not supported by the parser."""
+    with pytest.raises(GumError):
+        parse('a . "b.c" . d = 1')
+
+
+def test_trailing_dot_number_parsed_as_float():
+    result = parse("n = 2.")
+    assert result == {"n": 2.0}
+    assert isinstance(result["n"], float)
+
+
+def test_leading_dot_number_parsed_as_float():
+    result = parse("n = .5")
+    assert result == {"n": 0.5}
+    assert isinstance(result["n"], float)
+
+
+def test_scientific_notation_parsed_as_float():
+    result = parse("n = 1e10")
+    assert result == {"n": 1e10}
+    assert isinstance(result["n"], float)
+
+
+def test_signed_float():
+    result = parse("n = -3.14")
+    assert result == {"n": -3.14}
+    assert isinstance(result["n"], float)
+
+
+def test_positive_float():
+    result = parse("n = +3.14")
+    assert result == {"n": 3.14}
+    assert isinstance(result["n"], float)
+
+
+def test_nested_empty_list():
+    result = parse("a = [[]]")
+    assert result == {"a": [[]]}
+
+
+def test_nested_empty_table():
+    result = parse("t = { inner = {} }")
+    assert result == {"t": {"inner": {}}}
+
+
+def test_list_trailing_comma():
+    result = parse("a = [1, 2, 3,]")
+    assert result == {"a": [1, 2, 3]}
+
+
+def test_table_trailing_comma():
+    result = parse("t = { a = 1, b = 2, }")
+    assert result == {"t": {"a": 1, "b": 2}}
+
+
+def test_duplicate_key_in_table():
+    with pytest.raises(GumError, match="(?i)duplicate"):
+        parse("t = { a = 1, a = 2 }")
+
+
+def test_duplicate_key_in_list_values():
+    # Lists can have duplicate values, that's fine
+    result = parse("a = [1, 1, 1]")
+    assert result == {"a": [1, 1, 1]}
+
+
+def test_multiline_string_first_line_strip():
+    src = 's = """\nhello\nworld\n"""'
+    result = parse(src)
+    assert result == {"s": "hello\nworld"}
+
+
+def test_multiline_string_with_escapes():
+    src = r's = """hello\nworld"""'
+    result = parse(src)
+    assert result == {"s": "hello\nworld"}
+
+
+def test_multiline_string_line_continuation():
+    """Line continuation (backslash + newline) is supported in multiline strings."""
+    result = parse('s = """hello \\\nworld"""')
+    assert result == {"s": "hello world"}
+
+
+def test_reserved_word_in_quoted_key():
+    result = parse('"true" = 1')
+    assert result == {"true": 1}
+
+
+def test_bare_key_underscore_start():
+    result = parse("_key = 1")
+    assert result == {"_key": 1}
+
+
+def test_bare_key_underscore_only():
+    result = parse("_ = 1")
+    assert result == {"_": 1}
+
+
+def test_crlf_in_multiline_string():
+    src = 's = """\r\nhello\r\nworld\r\n"""'
+    result = parse(src)
+    assert result == {"s": "hello\nworld"}
+    assert "\r" not in result["s"]
+
+
+def test_only_whitespace_and_comments():
+    src = "# just a comment\n  \n# another comment\n"
+    result = parse(src)
+    assert result == {}
+
+
+def test_deeply_nested_dotted_keys():
+    src = "a.b.c.d.e = 1"
+    result = parse(src)
+    assert result == {"a": {"b": {"c": {"d": {"e": 1}}}}}
+
+
+def test_mixed_bare_and_quoted_keys_in_path():
+    src = 'a."b-c".d = 1'
+    result = parse(src)
+    assert result == {"a": {"b-c": {"d": 1}}}
+
+
+def test_number_with_underscores():
+    result = parse("n = 1_000_000")
+    assert result == {"n": 1000000}
+
+
+def test_float_with_underscores():
+    result = parse("n = 1_000.2_5")
+    assert result == {"n": 1000.25}
+
+
+def test_scientific_with_underscores():
+    result = parse("n = 1_0e1_0")
+    assert result == {"n": 10e10}
+
+
+def test_hex_with_underscores():
+    result = parse("n = 0xFF_FF")
+    assert result == {"n": 65535}
+
+
+def test_binary_with_underscores():
+    result = parse("n = 0b10_10")
+    assert result == {"n": 10}
+
+
+def test_octal_with_underscores():
+    result = parse("n = 0o7_5_5")
+    assert result == {"n": 493}
