@@ -1,5 +1,6 @@
 from gum.parser import Parser
-from gum.tokenizer import Tokenizer
+from gum.tokenizer import Tokenizer, GumError
+import pytest
 
 
 def parse(src):
@@ -155,15 +156,11 @@ def test_empty_array():
 
 
 def test_duplicate_key_error():
-    import pytest
-    from gum.tokenizer import GumError
     with pytest.raises(GumError, match="(?i)duplicate"):
         parse("a = 1\na = 2")
 
 
 def test_type_conflict_dotted_path():
-    import pytest
-    from gum.tokenizer import GumError
     src = "a = 1\na.b = 2"
     with pytest.raises(GumError):
         parse(src)
@@ -276,22 +273,16 @@ def test_whitespace_between_assignments():
 
 
 def test_reserved_keyword_true_as_key():
-    import pytest
-    from gum.tokenizer import GumError
     with pytest.raises(GumError, match="(?i)reserved"):
         parse("true = 1")
 
 
 def test_reserved_keyword_false_as_key():
-    import pytest
-    from gum.tokenizer import GumError
     with pytest.raises(GumError, match="(?i)reserved"):
         parse("false = 1")
 
 
 def test_reserved_keyword_null_as_key():
-    import pytest
-    from gum.tokenizer import GumError
     with pytest.raises(GumError, match="(?i)reserved"):
         parse("null = 1")
 
@@ -307,16 +298,18 @@ def test_mixed_whitespace_and_newline_between_assignments():
 
 
 def test_path_conflict_string_to_table():
-    import pytest
-    from gum.tokenizer import GumError
     src = "name = \"Alice\"\nname.first = \"Bob\""
     with pytest.raises(GumError, match="(?i)conflict"):
         parse(src)
 
 
 def test_path_conflict_table_to_string():
-    import pytest
-    from gum.tokenizer import GumError
     src = "a.b = 1\na = \"hello\""
     with pytest.raises(GumError, match="(?i)conflict"):
+        parse(src)
+
+
+def test_path_conflict_table_to_table():
+    src = "a.b = 1\na = {}"
+    with pytest.raises(GumError, match="(?i)duplicate"):
         parse(src)
