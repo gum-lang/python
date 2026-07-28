@@ -374,3 +374,18 @@ def test_explicit_positive_parsed():
 def test_underscore_number_parsed():
     result = parse("n = 1_000_000")
     assert result == {"n": 1000000}
+
+
+def test_negative_hex():
+    result = parse("n = -0xFF")
+    assert result == {"n": -255}
+
+
+def test_negative_binary():
+    result = parse("n = -0b1010")
+    assert result == {"n": -10}
+
+
+def test_negative_octal():
+    result = parse("n = -0o755")
+    assert result == {"n": -493}

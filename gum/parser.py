@@ -124,12 +124,15 @@ class Parser:
 
     def _parse_number_value(self, s: str) -> int | float:
         """Convert number token string to int or float per spec rules."""
-        if s.startswith(("0x", "0X", "0b", "0B", "0o", "0O")):
-            base_map = {"0x": 16, "0X": 16, "0b": 2, "0B": 2, "0o": 8, "0O": 8}
-            base = base_map[s[:2]]
-            digits = s[2:].replace("_", "")
-            return int(digits, base)
         clean = s.lstrip("+-")
+        if clean.startswith(("0x", "0X", "0b", "0B", "0o", "0O")):
+            base_map = {"0x": 16, "0X": 16, "0b": 2, "0B": 2, "0o": 8, "0O": 8}
+            base = base_map[clean[:2]]
+            digits = clean[2:].replace("_", "")
+            result = int(digits, base)
+            if s.startswith("-"):
+                return -result
+            return result
         if "e" in clean or "E" in clean:
             return float(s.replace("_", ""))
         if "." in clean:
