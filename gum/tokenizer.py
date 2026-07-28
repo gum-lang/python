@@ -260,27 +260,60 @@ class Tokenizer:
         raise GumError("Unterminated multiline string", start_line, start_col)
 
     def _dedent_multiline(self, raw: str) -> str:
-        # Normalize any remaining \r\n to \n
+        """Apply spec-compliant multi-line string dedent.
+
+        Algorithm:
+        1. Split content into lines.
+        2. Remove first line if empty (whitespace only).
+        3. Remove last line if whitespace only.
+        4. Find minimum indentation (spaces only) of remaining non-empty lines.
+        5. Strip that many leading spaces from every non-empty line.
+        6. Join with newlines.
+        """
         raw = raw.replace("\r\n", "\n")
         lines = raw.split("\n")
         if not lines:
             return raw
-        last_line = ""
-        for i in range(len(lines) - 1, -1, -1):
-            if lines[i].strip():
-                last_line = lines[i]
-                break
-        indent = len(last_line) - len(last_line.lstrip())
+
+        # Step 2: Remove first line if empty
+        if lines and not lines[0].strip():
+            lines = lines[1:]
+        if not lines:
+            return ""
+
+        # Step 3: Remove last line if whitespace only
+        if lines and not lines[-1].strip():
+            lines = lines[:-1]
+        if not lines:
+            return ""
+
+        # Step 4: Find minimum indentation (spaces only) of non-empty lines
+        min_indent = None
+        for line in lines:
+            if line.strip():  # non-empty
+                # Count leading spaces only
+                space_count = 0
+                for ch in line:
+                    if ch == " ":
+                        space_count += 1
+                    else:
+                        break
+                if min_indent is None or space_count < min_indent:
+                    min_indent = space_count
+
+        if min_indent is None or min_indent == 0:
+            min_indent = 0
+
+        # Step 5: Strip min_indent spaces from non-empty lines
         result: list[str] = []
-        for i, line in enumerate(lines):
-            if indent > 0 and len(line) >= indent and line[:indent].isspace():
-                result.append(line[indent:])
+        for line in lines:
+            if line.strip():  # non-empty
+                result.append(line[min_indent:])
             else:
                 result.append(line)
-        s = "\n".join(result)
-        if s.endswith("\n"):
-            s = s[:-1]
-        return s
+
+        # Step 6: Join with newlines
+        return "\n".join(result)
 
     def _read_escape(self) -> str:
         if self.pos >= len(self.source):
@@ -293,7 +326,6 @@ class Tokenizer:
             "f": "\f",
             "r": "\r",
             '"': '"',
-            "/": "/",
             "\\": "\\",
         }
         if ch == "u":

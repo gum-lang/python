@@ -403,6 +403,46 @@ def test_underscore_in_hex():
     assert tok.value == "0xFF_FF"
 
 
+def test_reject_forward_slash_escape():
+    with pytest.raises(GumError):
+        Tokenizer(r'"hello\/world"')
+
+
+def test_multiline_dedent_spec():
+    """Spec algorithm: min indentation of non-empty lines, spaces only."""
+    src = 's = """\n      "Did you ever hear the Tragedy of Darth Plagueis the Wise?"\n      "No."\n      "I thought not."\n"""'
+    t = Tokenizer(src)
+    t.advance()  # s
+    t.advance()  # whitespace
+    t.advance()  # =
+    t.advance()  # whitespace
+    tok = t.advance()  # string
+    assert tok.value == '"Did you ever hear the Tragedy of Darth Plagueis the Wise?"\n"No."\n"I thought not."'
+
+
+def test_multiline_dedent_no_leading_newline():
+    src = 's = """hello\n  world\n"""'
+    t = Tokenizer(src)
+    t.advance()  # s
+    t.advance()  # whitespace
+    t.advance()  # =
+    t.advance()  # whitespace
+    tok = t.advance()  # string
+    assert tok.value == "hello\n  world"
+
+
+def test_multiline_dedent_tabs_not_indentation():
+    """Tabs are treated as content, not indentation."""
+    src = 's = """\n\thello\n\tworld\n"""'
+    t = Tokenizer(src)
+    t.advance()  # s
+    t.advance()  # whitespace
+    t.advance()  # =
+    t.advance()  # whitespace
+    tok = t.advance()  # string
+    assert tok.value == "\thello\n\tworld"
+
+
 def test_positive_with_underscores():
     t = Tokenizer("+1_000")
     tok = t.peek()
