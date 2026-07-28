@@ -291,3 +291,13 @@ def test_reserved_keyword_null_as_key():
     from gum.tokenizer import GumError
     with pytest.raises(GumError, match="(?i)reserved"):
         parse("null = 1")
+
+
+def test_multiple_whitespace_between_assignments():
+    result = parse("a = 1     b = 2     c = 3")
+    assert result == {"a": 1, "b": 2, "c": 3}
+
+
+def test_mixed_whitespace_and_newline_between_assignments():
+    result = parse("a = 1  \n  b = 2\n  c = 3")
+    assert result == {"a": 1, "b": 2, "c": 3}

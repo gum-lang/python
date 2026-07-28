@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, NoReturn
+from typing import Any, NoReturn, Optional
 
-from gum.tokenizer import Optional, Token, Tokenizer, TokenType, GumError
+from gum.tokenizer import Token, Tokenizer, TokenType, GumError
 
 
 class Parser:
@@ -28,13 +28,13 @@ class Parser:
     def _expect(self, *types: TokenType) -> Any:
         return self.tok.expect(*types)
 
-    def _skip_newlines(self) -> None:
+    def _skip_separators(self) -> None:
         while self._peek() in (TokenType.NEWLINE, TokenType.WHITESPACE):
             self._advance()
 
     def parse(self) -> dict[str, Any]:
         result: dict[str, Any] = {}
-        self._skip_newlines()
+        self._skip_separators()
         while self._peek() != TokenType.EOF:
             self._parse_expression(result)
             self._skip_sep({TokenType.EOF})
@@ -42,7 +42,7 @@ class Parser:
 
     def _parse_expression(self, target: dict[str, Any]) -> None:
         keys = self._parse_path()
-        self._skip_newlines()
+        self._skip_separators()
         self._expect(TokenType.EQUALS)
         value = self._parse_value()
         self._assign_path(target, keys, value)
@@ -71,7 +71,7 @@ class Parser:
             self._error(f"Expected key, got {tok.type.name}({tok.value!r})")
 
     def _parse_value(self) -> Any:
-        self._skip_newlines()
+        self._skip_separators()
         t = self._peek()
 
         if t == TokenType.STRING:
@@ -109,7 +109,7 @@ class Parser:
     def _parse_table(self) -> dict[str, Any]:
         self._expect(TokenType.LBRACE)
         result: dict[str, Any] = {}
-        self._skip_newlines()
+        self._skip_separators()
         while self._peek() not in (TokenType.RBRACE, TokenType.EOF):
             self._parse_expression(result)
             self._skip_sep({TokenType.RBRACE})
@@ -121,19 +121,19 @@ class Parser:
             return
         if self._peek() == TokenType.COMMA:
             self._advance()
-            self._skip_newlines()
+            self._skip_separators()
         elif self._peek() in (TokenType.NEWLINE, TokenType.WHITESPACE):
-            self._skip_newlines()
+            self._skip_separators()
             if self._peek() == TokenType.COMMA:
                 self._advance()
-                self._skip_newlines()
+                self._skip_separators()
         else:
             self._error("Expected comma or newline")
 
     def _parse_array(self) -> list[Any]:
         self._expect(TokenType.LBRACKET)
         result: list[Any] = []
-        self._skip_newlines()
+        self._skip_separators()
         while self._peek() not in (TokenType.RBRACKET, TokenType.EOF):
             result.append(self._parse_value())
             self._skip_sep({TokenType.RBRACKET})
