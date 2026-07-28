@@ -313,3 +313,21 @@ def test_path_conflict_table_to_table():
     src = "a.b = 1\na = {}"
     with pytest.raises(GumError, match="(?i)duplicate"):
         parse(src)
+
+
+def test_inline_table_subkey_reassignment():
+    src = "tbl = { x = 1 }\ntbl.x = 2"
+    with pytest.raises(GumError, match="(?i)redefin"):
+        parse(src)
+
+
+def test_inline_table_replacement():
+    src = "tbl = { x = 1 }\ntbl = 2"
+    with pytest.raises(GumError, match="(?i)redefin"):
+        parse(src)
+
+
+def test_adding_subkey_to_inline_table():
+    """Adding new sub-keys to existing table is allowed."""
+    result = parse("tbl = { x = 1 }\ntbl.y = 2")
+    assert result == {"tbl": {"x": 1, "y": 2}}

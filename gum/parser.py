@@ -8,6 +8,7 @@ from gum.tokenizer import Token, Tokenizer, TokenType, GumError
 class Parser:
     def __init__(self, tokenizer: Tokenizer) -> None:
         self.tok = tokenizer
+        self._inline_tables: set[tuple[str, ...]] = set()
 
     def _error(self, msg: str) -> NoReturn:
         t = self.tok.peek()
@@ -37,20 +38,29 @@ class Parser:
         seen_keys: set[str] = set()
         self._skip_separators()
         while self._peek() != TokenType.EOF:
-            self._parse_expression(result, seen_keys)
+            self._parse_expression(result, seen_keys, path_prefix=())
             self._skip_sep({TokenType.EOF})
         return result
 
-    def _parse_expression(self, target: dict[str, Any], seen_keys: set[str]) -> None:
+    def _register_inline_table(self, keys: tuple[str, ...]) -> None:
+        self._inline_tables.add(keys)
+
+    def _parse_expression(self, target: dict[str, Any], seen_keys: set[str], path_prefix: tuple[str, ...] = ()) -> None:
         keys = self._parse_path()
         self._skip_separators()
         self._expect(TokenType.EQUALS)
         value = self._parse_value()
+        full_path = path_prefix + tuple(keys)
         if len(keys) == 1 and keys[0] in seen_keys:
+            # Check if existing is an inline table being replaced
+            if full_path in self._inline_tables:
+                self._error(f"Cannot redefine inline table at {keys[0]!r}")
             self._error(f"Duplicate key: {keys[0]!r}")
         if len(keys) == 1:
             seen_keys.add(keys[0])
         self._assign_path(target, keys, value)
+        if isinstance(value, dict):
+            self._register_inline_table(full_path)
 
     def _parse_path(self) -> list[str]:
         keys = [self._parse_key()]
@@ -117,7 +127,7 @@ class Parser:
         seen_keys: set[str] = set()
         self._skip_separators()
         while self._peek() not in (TokenType.RBRACE, TokenType.EOF):
-            self._parse_expression(result, seen_keys)
+            self._parse_expression(result, seen_keys, path_prefix=())
             self._skip_sep({TokenType.RBRACE})
         self._expect(TokenType.RBRACE)
         return result
@@ -151,8 +161,17 @@ class Parser:
     ) -> None:
         current = target
         for i, key in enumerate(keys):
+            full_path_so_far = tuple(keys[:i+1])
+            parent_path = tuple(keys[:i])
             if i == len(keys) - 1:
                 if key in current:
+                    # Check if existing is an inline table being replaced
+                    if full_path_so_far in self._inline_tables:
+                        self._error(f"Cannot redefine inline table at {key!r}")
+                    # Check if we're trying to redefine a sub-key of an inline table
+                    if parent_path in self._inline_tables:
+                        self._error(f"Cannot redefine sub-key of inline table at {key!r}")
+                    # Check type conflict: existing dict being replaced by non-dict
                     if isinstance(current[key], dict) and not isinstance(value, dict):
                         self._error(
                             f"Key path conflict: {key!r} is already a table, cannot be a {type(value).__name__}"
