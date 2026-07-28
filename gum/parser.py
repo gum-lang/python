@@ -1,3 +1,14 @@
+"""Recursive descent parser for the gum configuration file format.
+
+Consumes tokens from the Tokenizer and produces a nested dict structure.
+Handles:
+- Assignments with comma/newline separators
+- Dotted path keys (e.g., a.b.c = 1)
+- Tables ({}) and lists ([])
+- Semantic validation: duplicate keys, path conflicts, table redefinition
+
+Stops on first error (no recovery).
+"""
 from __future__ import annotations
 
 from typing import Any, NoReturn, Optional
@@ -6,11 +17,15 @@ from gum.tokenizer import Token, Tokenizer, TokenType, GumError
 
 
 class Parser:
+    """Recursive descent parser that converts token stream to nested dict."""
+
     def __init__(self, tokenizer: Tokenizer) -> None:
+        """Initialize parser with a Tokenizer instance."""
         self.tok = tokenizer
         self._inline_tables: set[tuple[str, ...]] = set()
 
     def _error(self, msg: str) -> NoReturn:
+        """Raise a GumError at the current token position."""
         t = self.tok.peek()
         if t is not None:
             raise GumError(msg, t.line, t.col)
@@ -18,6 +33,7 @@ class Parser:
             raise GumError(msg, 0, 0)
 
     def _peek(self) -> TokenType:
+        """Return the type of the next token, erroring on EOF."""
         next_token = self.tok.peek()
         if next_token is None:
             self._error("Unexpected end of input")
@@ -66,6 +82,7 @@ class Parser:
             self._register_inline_tables_recursive(full_path, value)
 
     def _parse_path(self) -> list[str]:
+        """Parse a dotted key path (e.g., 'a.b.c' -> ['a', 'b', 'c'])."""
         keys = [self._parse_key()]
         while self._peek() == TokenType.DOT:
             self._advance()
@@ -73,6 +90,7 @@ class Parser:
         return keys
 
     def _parse_key(self) -> str:
+        """Parse a single key segment (identifier or string, rejecting keywords)."""
         tok = self._advance()
         if tok is None:
             self._error("Unexpected end of input")
@@ -89,6 +107,7 @@ class Parser:
             self._error(f"Expected key, got {tok.type.name}({tok.value!r})")
 
     def _parse_value(self) -> Any:
+        """Parse the next value token into a Python object."""
         self._skip_separators()
         t = self._peek()
 
@@ -140,6 +159,7 @@ class Parser:
         return int(s.replace("_", ""))
 
     def _parse_table(self) -> dict[str, Any]:
+        """Parse an inline table enclosed in { }."""
         self._expect(TokenType.LBRACE)
         result: dict[str, Any] = {}
         seen_keys: set[str] = set()
@@ -165,6 +185,7 @@ class Parser:
             self._error("Expected comma or newline")
 
     def _parse_array(self) -> list[Any]:
+        """Parse an array literal enclosed in [ ]."""
         self._expect(TokenType.LBRACKET)
         result: list[Any] = []
         self._skip_separators()
@@ -177,6 +198,11 @@ class Parser:
     def _assign_path(
         self, target: dict[str, Any], keys: list[str], value: Any
     ) -> None:
+        """Assign a value at a nested path, detecting duplicate keys and type conflicts.
+
+        Walks the key path, creating intermediate dicts as needed.
+        Raises on duplicate keys, type mismatches, or inline table redefinition.
+        """
         current = target
         for i, key in enumerate(keys):
             full_path_so_far = tuple(keys[:i+1])

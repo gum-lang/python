@@ -1,3 +1,17 @@
+"""Tokenizer for the gum configuration file format.
+
+Scans source text into a stream of tokens, handling:
+- UTF-8 BOM stripping
+- Comments (# to end of line, consumed silently)
+- Whitespace (coalesced into WHITESPACE tokens)
+- Strings (quoted and multi-line with spec-compliant dedent)
+- Numbers (int, float, hex, binary, octal, scientific, with underscores)
+- Keywords (true, false, null)
+- Identifiers (bare keys)
+- Punctuation ({, }, [, ], =, ,, .)
+
+All tokens carry line/column position for error reporting.
+"""
 from __future__ import annotations
 
 from enum import Enum, auto
@@ -6,6 +20,7 @@ from typing import Optional
 
 
 class TokenType(Enum):
+    """Enumeration of all token types recognized by the tokenizer."""
     LBRACE = auto()
     RBRACE = auto()
     LBRACKET = auto()
@@ -26,6 +41,7 @@ class TokenType(Enum):
 
 @dataclass
 class Token:
+    """Represents a single lexical token with type, value, and position."""
     type: TokenType
     value: str | None
     line: int
@@ -33,6 +49,7 @@ class Token:
 
 
 class GumError(Exception):
+    """Exception raised for tokenization and parsing errors with position info."""
     def __init__(self, message: str, line: int, col: int) -> None:
         self.message = message
         self.line = line
@@ -41,6 +58,7 @@ class GumError(Exception):
 
 
 class Tokenizer:
+    """Converts gum source text into a stream of tokens."""
     KEYWORDS: dict[str, TokenType] = {
         "true": TokenType.TRUE,
         "false": TokenType.FALSE,
@@ -48,6 +66,7 @@ class Tokenizer:
     }
 
     def __init__(self, source: str) -> None:
+        """Initialize tokenizer with source text, stripping UTF-8 BOM if present."""
         if source.startswith("\ufeff"):
             source = source[1:]
         self.source = source
@@ -58,14 +77,17 @@ class Tokenizer:
         self._advance()
 
     def peek(self) -> Optional[Token]:
+        """Return the current token without advancing."""
         return self._current
 
     def advance(self) -> Optional[Token]:
+        """Return the current token and advance to the next one."""
         tok = self._current
         self._advance()
         return tok
 
     def expect(self, *types: TokenType) -> Optional[Token]:
+        """Assert the current token matches one of the given types, then advance."""
         tok = self._current
         if tok is not None and tok.type not in types:
             expected = " or ".join(t.name for t in types)
@@ -78,6 +100,7 @@ class Tokenizer:
         return tok
 
     def _advance(self) -> None:
+        """Read the next non-comment token and store it as _current."""
         self._current = None
         self._read_ws_or_comment()
         if self._current is not None:
@@ -203,6 +226,7 @@ class Tokenizer:
         return self._read_quoted_string(start_line, start_col)
 
     def _read_quoted_string(self, start_line: int, start_col: int) -> Token:
+        """Read a single-line quoted string, enforcing control character escaping."""
         chars: list[str] = []
         while self.pos < len(self.source):
             ch = self._take_char()
@@ -223,6 +247,7 @@ class Tokenizer:
         raise GumError("Unterminated string", start_line, start_col)
 
     def _read_multiline_string(self, start_line: int, start_col: int) -> Token:
+        """Read a triple-quoted multiline string, normalizing CRLF and applying dedent."""
         chars: list[str] = []
         if self.pos < len(self.source) and self.source[self.pos] == "\n":
             self._take_char()
@@ -269,6 +294,12 @@ class Tokenizer:
         4. Find minimum indentation (spaces only) of remaining non-empty lines.
         5. Strip that many leading spaces from every non-empty line.
         6. Join with newlines.
+
+        Args:
+            raw: The raw multiline string content (without delimiters).
+
+        Returns:
+            The dedented string with consistent indentation.
         """
         raw = raw.replace("\r\n", "\n")
         lines = raw.split("\n")
@@ -316,6 +347,7 @@ class Tokenizer:
         return "\n".join(result)
 
     def _read_escape(self) -> str:
+        """Read and resolve an escape sequence after the backslash."""
         if self.pos >= len(self.source):
             raise GumError("Unterminated escape sequence", self.line, self.col)
         ch = self._take_char()
@@ -343,7 +375,10 @@ class Tokenizer:
         raise GumError(f"Invalid escape sequence: \\{ch}", self.line, self.col)
 
     def _read_number(self) -> Token:
-        """Parse a number: int, float, hex, binary, octal, scientific, with optional underscore separators."""
+        """Parse a number: int, float, hex, binary, octal, scientific, with optional underscore separators.
+
+        Dispatches to the appropriate specialized reader based on prefix.
+        """
         start_line = self.line
         start_col = self.col
         chars: list[str] = []
@@ -370,6 +405,7 @@ class Tokenizer:
         return self._read_decimal(start_line, start_col, chars)
 
     def _read_hex(self, start_line: int, start_col: int, prefix: list[str]) -> Token:
+        """Read a hexadecimal number literal (0x prefix)."""
         chars = prefix
         chars.append(self._take_char())  # '0'
         chars.append(self._take_char())  # 'x' or 'X'
@@ -385,6 +421,7 @@ class Tokenizer:
         return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
 
     def _read_binary(self, start_line: int, start_col: int, prefix: list[str]) -> Token:
+        """Read a binary number literal (0b prefix)."""
         chars = prefix
         chars.append(self._take_char())  # '0'
         chars.append(self._take_char())  # 'b' or 'B'
@@ -400,6 +437,7 @@ class Tokenizer:
         return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
 
     def _read_octal(self, start_line: int, start_col: int, prefix: list[str]) -> Token:
+        """Read an octal number literal (0o prefix)."""
         chars = prefix
         chars.append(self._take_char())  # '0'
         chars.append(self._take_char())  # 'o' or 'O'
@@ -415,6 +453,7 @@ class Tokenizer:
         return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
 
     def _read_decimal(self, start_line: int, start_col: int, prefix: list[str]) -> Token:
+        """Read a decimal number, optionally with fractional and/or scientific notation parts."""
         chars = prefix
         # Integer part
         while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
@@ -482,6 +521,7 @@ class Tokenizer:
         return Token(TokenType.DOT, None, start_line, start_col)
 
     def _read_ident(self) -> Token:
+        """Read an identifier or keyword (alphanumeric + underscore, starting with letter or underscore)."""
         start_line = self.line
         start_col = self.col
         chars: list[str] = []

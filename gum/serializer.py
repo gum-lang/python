@@ -1,9 +1,25 @@
+"""Serializer for the gum configuration file format.
+
+Converts Python dicts back to gum-formatted strings.
+- Uses spec-defined escapes only (no \\/)
+- Multi-line strings use triple-quote syntax
+- Heuristic for inline vs multi-line tables/lists
+"""
 from __future__ import annotations
 
 from typing import Any
 
 
 def serialize(data: dict[str, Any], indent: int = 2) -> str:
+    """Serialize a Python dict to a gum-formatted string.
+
+    Args:
+        data: The dictionary to serialize.
+        indent: Number of spaces per indentation level.
+
+    Returns:
+        A gum-formatted string, or empty string for empty input.
+    """
     if not data:
         return ""
     lines: list[str] = []
@@ -18,6 +34,7 @@ def serialize(data: dict[str, Any], indent: int = 2) -> str:
 
 
 def _serialize_value(value: Any, depth: int, indent: int) -> list[str]:
+    """Serialize a single Python value into one or more output lines."""
     if value is None:
         return ["null"]
     elif isinstance(value, bool):
@@ -35,7 +52,12 @@ def _serialize_value(value: Any, depth: int, indent: int) -> list[str]:
 
 
 def _serialize_string(value: str) -> str:
-    """Serialize a string value with spec-defined escapes only."""
+    """Serialize a string value with spec-defined escapes only.
+
+    Uses triple-quoted multiline syntax if the string contains newlines
+    and does not contain triple quotes. Otherwise uses quoted form with
+    escape sequences for control characters and special characters.
+    """
     if "\n" in value and '"""' not in value:
         return '"""\n' + value + '"""'
     escaped: list[str] = []
@@ -63,6 +85,7 @@ def _serialize_string(value: str) -> str:
 
 
 def _serialize_list(lst: list[Any], depth: int, indent: int) -> list[str]:
+    """Serialize a list, choosing inline or multiline format based on heuristics."""
     if not lst:
         return ["[]"]
     simple = all(isinstance(v, (str, int, float, bool, type(None))) for v in lst)
@@ -79,6 +102,7 @@ def _serialize_list(lst: list[Any], depth: int, indent: int) -> list[str]:
 
 
 def _serialize_dict(d: dict[str, Any], depth: int, indent: int) -> list[str]:
+    """Serialize a dict, choosing inline or multiline format based on heuristics."""
     if not d:
         return ["{}"]
     all_simple = all(
