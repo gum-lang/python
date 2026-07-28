@@ -45,6 +45,12 @@ class Parser:
     def _register_inline_table(self, keys: tuple[str, ...]) -> None:
         self._inline_tables.add(keys)
 
+    def _register_inline_tables_recursive(self, path: tuple[str, ...], value: Any) -> None:
+        if isinstance(value, dict):
+            self._inline_tables.add(path)
+            for key, val in value.items():
+                self._register_inline_tables_recursive(path + (key,), val)
+
     def _parse_expression(self, target: dict[str, Any], seen_keys: set[str], path_prefix: tuple[str, ...] = ()) -> None:
         keys = self._parse_path()
         self._skip_separators()
@@ -60,7 +66,7 @@ class Parser:
             seen_keys.add(keys[0])
         self._assign_path(target, keys, value)
         if isinstance(value, dict):
-            self._register_inline_table(full_path)
+            self._register_inline_tables_recursive(full_path, value)
 
     def _parse_path(self) -> list[str]:
         keys = [self._parse_key()]

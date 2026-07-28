@@ -331,3 +331,10 @@ def test_adding_subkey_to_inline_table():
     """Adding new sub-keys to existing table is allowed."""
     result = parse("tbl = { x = 1 }\ntbl.y = 2")
     assert result == {"tbl": {"x": 1, "y": 2}}
+
+
+def test_nested_inline_table_subkey_reassignment():
+    """Nested inline tables should also be protected from redefinition."""
+    src = "tbl = { nested = { x = 1 } }\ntbl.nested.x = 2"
+    with pytest.raises(GumError, match="(?i)redefin"):
+        parse(src)
