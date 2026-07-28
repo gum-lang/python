@@ -34,17 +34,22 @@ class Parser:
 
     def parse(self) -> dict[str, Any]:
         result: dict[str, Any] = {}
+        seen_keys: set[str] = set()
         self._skip_separators()
         while self._peek() != TokenType.EOF:
-            self._parse_expression(result)
+            self._parse_expression(result, seen_keys)
             self._skip_sep({TokenType.EOF})
         return result
 
-    def _parse_expression(self, target: dict[str, Any]) -> None:
+    def _parse_expression(self, target: dict[str, Any], seen_keys: set[str]) -> None:
         keys = self._parse_path()
         self._skip_separators()
         self._expect(TokenType.EQUALS)
         value = self._parse_value()
+        if len(keys) == 1 and keys[0] in seen_keys:
+            self._error(f"Duplicate key: {keys[0]!r}")
+        if len(keys) == 1:
+            seen_keys.add(keys[0])
         self._assign_path(target, keys, value)
 
     def _parse_path(self) -> list[str]:
@@ -109,9 +114,10 @@ class Parser:
     def _parse_table(self) -> dict[str, Any]:
         self._expect(TokenType.LBRACE)
         result: dict[str, Any] = {}
+        seen_keys: set[str] = set()
         self._skip_separators()
         while self._peek() not in (TokenType.RBRACE, TokenType.EOF):
-            self._parse_expression(result)
+            self._parse_expression(result, seen_keys)
             self._skip_sep({TokenType.RBRACE})
         self._expect(TokenType.RBRACE)
         return result

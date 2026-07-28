@@ -154,8 +154,11 @@ def test_empty_array():
     assert parse("a = []") == {"a": []}
 
 
-def test_duplicate_key_overwrites():
-    assert parse("a = 1\na = 2") == {"a": 2}
+def test_duplicate_key_error():
+    import pytest
+    from gum.tokenizer import GumError
+    with pytest.raises(GumError, match="(?i)duplicate"):
+        parse("a = 1\na = 2")
 
 
 def test_type_conflict_dotted_path():
