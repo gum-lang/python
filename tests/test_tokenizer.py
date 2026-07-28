@@ -183,7 +183,9 @@ def test_tab_allowed_in_string():
 def test_multiline_string_crlf_normalized():
     t = Tokenizer('s = """\r\nhello\r\nworld\r\n"""')
     t.advance()  # s
+    t.advance()  # whitespace
     t.advance()  # =
+    t.advance()  # whitespace
     tok = t.advance()  # string
     assert tok.value == "hello\nworld"
     assert "\r" not in tok.value
@@ -193,7 +195,9 @@ def test_multiline_string_crlf_with_dedent():
     src = 's = """\r\n  hello\r\n  world\r\n  """'
     t = Tokenizer(src)
     t.advance()  # s
+    t.advance()  # whitespace
     t.advance()  # =
+    t.advance()  # whitespace
     tok = t.advance()  # string
     assert tok.value == "hello\nworld"
     assert "\r" not in tok.value
@@ -203,7 +207,9 @@ def test_multiline_string_cr_escape_preserved():
     src = r's = """hello\rworld"""'
     t = Tokenizer(src)
     t.advance()  # s
+    t.advance()  # whitespace
     t.advance()  # =
+    t.advance()  # whitespace
     tok = t.advance()  # string
     assert tok.value == "hello\rworld"
     assert "\r" in tok.value
@@ -218,7 +224,9 @@ def test_multiline_string_bare_cr_normalized():
     src = 's = """hello\rworld"""'
     t = Tokenizer(src)
     t.advance()  # s
+    t.advance()  # whitespace
     t.advance()  # =
+    t.advance()  # whitespace
     tok = t.advance()  # string
     assert tok.value == "hello\nworld"
     assert "\r" not in tok.value
@@ -243,8 +251,9 @@ def test_tab_column_tracking():
     t = Tokenizer("a\t= 1")
     tok = t.advance()  # 'a' IDENT
     assert tok.col == 1
-    tok = t.advance()  # skips tab, should be at col 5
-    assert tok.col == 5  # '=' EQUALS
+    t.advance()  # tab WHITESPACE
+    tok = t.advance()  # '=' EQUALS
+    assert tok.col == 5
 
 
 def test_tab_in_comment_column_tracking():
@@ -252,3 +261,17 @@ def test_tab_in_comment_column_tracking():
     t.advance()  # newline after comment
     tok = t.advance()  # 'key' IDENT
     assert tok.col == 1  # key starts at col 1 on new line
+
+
+def test_whitespace_token():
+    t = Tokenizer("  \t  key")
+    tok = t.peek()
+    assert tok.type == TokenType.WHITESPACE
+    assert tok.value == "  \t  "
+
+
+def test_bom_stripped():
+    t = Tokenizer("\ufeffkey = 1")
+    tok = t.peek()
+    assert tok.type == TokenType.IDENT
+    assert tok.value == "key"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum, auto
 from dataclasses import dataclass
-from typing import IO, Optional
+from typing import Optional
 
 
 class TokenType(Enum):
@@ -19,6 +19,7 @@ class TokenType(Enum):
     FALSE = auto()
     NULL = auto()
     IDENT = auto()
+    WHITESPACE = auto()
     NEWLINE = auto()
     EOF = auto()
 
@@ -47,6 +48,8 @@ class Tokenizer:
     }
 
     def __init__(self, source: str) -> None:
+        if source.startswith("\ufeff"):
+            source = source[1:]
         self.source = source
         self.pos = 0
         self.line = 1
@@ -75,7 +78,10 @@ class Tokenizer:
         return tok
 
     def _advance(self) -> None:
-        self._skip_ws_and_comments()
+        self._current = None
+        self._read_ws_or_comment()
+        if self._current is not None:
+            return
         if self.pos >= len(self.source):
             self._current = Token(TokenType.EOF, None, self.line, self.col)
             return
@@ -151,27 +157,30 @@ class Tokenizer:
         self.line += 1
         self.col = 1
 
-    def _skip_ws_and_comments(self) -> None:
+    def _read_ws_or_comment(self) -> None:
+        """Skip comments silently; emit WHITESPACE token for runs of spaces/tabs."""
         while self.pos < len(self.source):
             ch = self.source[self.pos]
-            if ch == " ":
-                self.pos += 1
-                self.col += 1
-            elif ch == "\t":
-                self.pos += 1
-                self._advance_col_for_tab()
-            elif ch == "#":
+            if ch == "#":
+                # Consume comment to end of line
                 while self.pos < len(self.source):
                     c = self.source[self.pos]
-                    if c == "\n" or c == "\r":
+                    if c == "\n":
+                        break
+                    if c == "\r":
                         break
                     self.pos += 1
-                    if c == "\t":
-                        self._advance_col_for_tab()
-                    else:
-                        self.col += 1
+                # Don't consume the newline itself; let it become NEWLINE token
+            elif ch == " " or ch == "\t":
+                start_line = self.line
+                start_col = self.col
+                ws_chars: list[str] = []
+                while self.pos < len(self.source) and self.source[self.pos] in (" ", "\t"):
+                    ws_chars.append(self._take_char())
+                self._current = Token(TokenType.WHITESPACE, "".join(ws_chars), start_line, start_col)
+                return
             else:
-                break
+                return
 
     def _read_string_or_multiline(self) -> Token:
         start_line = self.line
