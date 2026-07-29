@@ -231,7 +231,7 @@ class Tokenizer:
                 chars.append(ch)
             else:
                 code = ord(ch)
-                if (code <= 0x08 or (0x0A <= code <= 0x1F) or code == 0x7F):
+                if code <= 0x08 or (0x0A <= code <= 0x1F):
                     raise GumError(
                         f"Control character U+{code:04X} must be escaped",
                         self.line,
@@ -270,13 +270,19 @@ class Tokenizer:
                 ch = self._read_escape()
                 chars.append(ch)
             elif ch == "\r":
-                # Normalize CRLF to LF
+                # CRLF is permitted via nl rule; bare CR is not
                 if self.pos < len(self.source) and self.source[self.pos] == "\n":
                     self._take_char()
-                chars.append("\n")
+                    chars.append("\n")
+                else:
+                    raise GumError(
+                        "Unexpected character: \\r",
+                        self.line,
+                        self.col - 1,
+                    )
             else:
                 code = ord(ch)
-                if (code <= 0x08 or (0x0B <= code <= 0x1F) or code == 0x7F):
+                if code <= 0x08 or (0x0B <= code <= 0x1F):
                     raise GumError(
                         f"Control character U+{code:04X} must be escaped",
                         self.line,
@@ -471,6 +477,9 @@ class Tokenizer:
             chars.append(self._take_char())
             if self.pos < len(self.source) and self.source[self.pos] in ("+", "-"):
                 chars.append(self._take_char())
+            # ABNF requires at least one digit in dec-digits
+            if self.pos >= len(self.source) or not ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
+                raise GumError("Expected digit in exponent", start_line, start_col)
             while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
                 chars.append(self._take_char())
         self._validate_underscores(chars, start_line, start_col)

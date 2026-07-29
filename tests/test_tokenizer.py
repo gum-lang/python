@@ -161,10 +161,12 @@ def test_reject_bare_newline_in_string():
         Tokenizer('"hello\nworld"')
 
 
-def test_reject_bare_delete_char():
-    # DEL character (U+007F)
-    with pytest.raises(GumError):
-        Tokenizer('"hello\x7fworld"')
+def test_del_allowed_in_string():
+    """ABNF unescaped includes %x5D-10FFFF which covers DEL (0x7F)."""
+    t = Tokenizer('"hello\x7fworld"')
+    tok = t.peek()
+    assert tok.type == TokenType.STRING
+    assert tok.value == "hello\x7fworld"
 
 
 def test_reject_bare_nul_char():
@@ -178,6 +180,12 @@ def test_tab_allowed_in_string():
     tok = t.advance()
     assert tok.type == TokenType.STRING
     assert tok.value == "hello\tworld"
+
+
+def test_reject_bare_cr_in_multiline_string():
+    """ABNF unescaped-ml excludes CR; only CRLF via nl rule is permitted."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\rworld"""')
 
 
 def test_multiline_string_crlf_normalized():
@@ -220,16 +228,15 @@ def test_ident_cannot_start_with_digit():
         Tokenizer("1key")
 
 
-def test_multiline_string_bare_cr_normalized():
-    src = 's = """hello\rworld"""'
-    t = Tokenizer(src)
-    t.advance()  # s
-    t.advance()  # whitespace
-    t.advance()  # =
-    t.advance()  # whitespace
-    tok = t.advance()  # string
-    assert tok.value == "hello\nworld"
-    assert "\r" not in tok.value
+def test_multiline_string_bare_cr_rejected():
+    """Bare CR (not followed by LF) is rejected in multiline strings."""
+    t = Tokenizer('s = """hello\rworld"""')
+    with pytest.raises(GumError):
+        t.advance()  # s
+        t.advance()  # whitespace
+        t.advance()  # =
+        t.advance()  # whitespace
+        t.advance()  # string (raises)
 
 
 def test_number_followed_by_underscore():
@@ -511,3 +518,27 @@ def test_tab_allowed_in_multiline_string():
     tok = t.peek()
     assert tok.type == TokenType.STRING
     assert tok.value == "hello\tworld"
+
+
+def test_del_allowed_in_multiline_string():
+    """ABNF unescaped-ml includes %x5D-10FFFF which covers DEL (0x7F)."""
+    t = Tokenizer('"""hello\x7fworld"""')
+    tok = t.peek()
+    assert tok.type == TokenType.STRING
+    assert tok.value == "hello\x7fworld"
+
+
+def test_incomplete_exponent_rejected():
+    """ABNF exp requires dec-digits (at least one digit) after e/E."""
+    with pytest.raises(GumError):
+        Tokenizer("2e")
+
+
+def test_incomplete_exponent_with_sign_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("2e+")
+
+
+def test_incomplete_exponent_negative_sign_rejected():
+    with pytest.raises(GumError):
+        Tokenizer("2e-")
