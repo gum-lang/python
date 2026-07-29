@@ -542,3 +542,67 @@ def test_incomplete_exponent_with_sign_rejected():
 def test_incomplete_exponent_negative_sign_rejected():
     with pytest.raises(GumError):
         Tokenizer("2e-")
+
+
+def test_underscore_before_dot_rejected():
+    """ABNF dec-digits: _ must be followed by digit, not dot."""
+    with pytest.raises(GumError):
+        Tokenizer("1_.2")
+
+
+def test_underscore_before_exp_rejected():
+    """ABNF dec-digits: _ must be followed by digit, not e."""
+    with pytest.raises(GumError):
+        Tokenizer("1_e5")
+
+
+def test_underscore_after_dot_rejected():
+    """ABNF dec-digits: first char after dot must be digit, not _."""
+    with pytest.raises(GumError):
+        Tokenizer("1._2")
+
+
+def test_underscore_before_exp_in_frac_rejected():
+    """ABNF dec-digits in frac: _ must be followed by digit, not e."""
+    with pytest.raises(GumError):
+        Tokenizer("1.2_e5")
+
+
+def test_underscore_after_exp_sign_rejected():
+    """ABNF dec-digits in exp: first char after e/sign must be digit, not _."""
+    with pytest.raises(GumError):
+        Tokenizer("2e_5")
+
+
+def test_valid_underscore_in_decimal():
+    """Valid underscore placement in all segments."""
+    t = Tokenizer("1_000.2_5e1_0")
+    tok = t.peek()
+    assert tok.type == TokenType.NUMBER
+    assert tok.value == "1_000.2_5e1_0"
+
+
+def test_reject_nul_in_comment():
+    """ABNF comment-char excludes NUL (U+0000)."""
+    with pytest.raises(GumError):
+        Tokenizer("# comment\x00here\nkey")
+
+
+def test_reject_bs_in_comment():
+    """ABNF comment-char excludes BS (U+0008)."""
+    with pytest.raises(GumError):
+        Tokenizer("# comment\x08here\nkey")
+
+
+def test_reject_vt_in_comment():
+    """ABNF comment-char excludes VT (U+000B)."""
+    with pytest.raises(GumError):
+        Tokenizer("# comment\x0bhere\nkey")
+
+
+def test_tab_allowed_in_comment():
+    """ABNF comment-char explicitly allows HTAB."""
+    t = Tokenizer("# comment\there\nkey")
+    assert t.peek().type == TokenType.NEWLINE
+    t.advance()
+    assert t.peek().type == TokenType.IDENT

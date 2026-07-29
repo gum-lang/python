@@ -185,13 +185,21 @@ class Tokenizer:
         while self.pos < len(self.source):
             ch = self.source[self.pos]
             if ch == "#":
-                # Consume comment to end of line
+                # Consume comment to end of line, validating each character
                 while self.pos < len(self.source):
                     c = self.source[self.pos]
                     if c == "\n":
                         break
                     if c == "\r":
                         break
+                    code = ord(c)
+                    # ABNF comment-char = HTAB / %x20-10FFFF
+                    if code <= 0x08 or (0x0A <= code <= 0x1F):
+                        raise GumError(
+                            f"Invalid character U+{code:04X} in comment",
+                            self.line,
+                            self.col,
+                        )
                     self.pos += 1
                 # Don't consume the newline itself; let it become NEWLINE token
             elif ch == " " or ch == "\t":
@@ -459,19 +467,36 @@ class Tokenizer:
         self._validate_underscores(chars, start_line, start_col)
         return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
 
+    def _validate_decimal_segment_underscores(self, segment: str, start_line: int, start_col: int) -> None:
+        """Validate underscore placement within a single decimal digit segment."""
+        if not segment:
+            return
+        if segment.startswith("_"):
+            raise GumError("Underscore cannot be leading", start_line, start_col)
+        if segment.endswith("_"):
+            raise GumError("Underscore cannot be trailing", start_line, start_col)
+        if "__" in segment:
+            raise GumError("Underscores cannot be consecutive", start_line, start_col)
+
     def _read_decimal(self, start_line: int, start_col: int, prefix: list[str]) -> Token:
         """Read a decimal number, optionally with fractional and/or scientific notation parts."""
         chars = prefix
         # Integer part
+        int_start = len(chars)
         while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
             chars.append(self._take_char())
         if len(chars) == 1 and chars[0] in ("+", "-"):
             raise GumError("Expected digit after sign", start_line, start_col)
+        # Validate integer segment
+        self._validate_decimal_segment_underscores("".join(chars[int_start:]), start_line, start_col)
         # Fractional part
         if self.pos < len(self.source) and self.source[self.pos] == ".":
             chars.append(self._take_char())
+            frac_start = len(chars)
             while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
                 chars.append(self._take_char())
+            # Validate fractional segment
+            self._validate_decimal_segment_underscores("".join(chars[frac_start:]), start_line, start_col)
         # Scientific notation
         if self.pos < len(self.source) and self.source[self.pos] in ("e", "E"):
             chars.append(self._take_char())
@@ -480,9 +505,11 @@ class Tokenizer:
             # ABNF requires at least one digit in dec-digits
             if self.pos >= len(self.source) or not ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
                 raise GumError("Expected digit in exponent", start_line, start_col)
+            exp_start = len(chars)
             while self.pos < len(self.source) and ("0" <= self.source[self.pos] <= "9" or self.source[self.pos] == "_"):
                 chars.append(self._take_char())
-        self._validate_underscores(chars, start_line, start_col)
+            # Validate exponent segment
+            self._validate_decimal_segment_underscores("".join(chars[exp_start:]), start_line, start_col)
         return Token(TokenType.NUMBER, "".join(chars), start_line, start_col)
 
     def _validate_underscores(self, chars: list[str], start_line: int, start_col: int) -> None:
