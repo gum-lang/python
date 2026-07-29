@@ -473,3 +473,41 @@ def test_positive_with_underscores():
     tok = t.peek()
     assert tok.type == TokenType.NUMBER
     assert tok.value == "+1_000"
+
+
+def test_reject_nul_in_multiline_string():
+    """ABNF unescaped-ml excludes NUL (U+0000)."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\x00world"""')
+
+
+def test_reject_backspace_in_multiline_string():
+    """ABNF unescaped-ml excludes BS (U+0008)."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\x08world"""')
+
+
+def test_reject_vt_in_multiline_string():
+    """ABNF unescaped-ml excludes VT (U+000B)."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\x0bworld"""')
+
+
+def test_reject_ff_in_multiline_string():
+    """ABNF unescaped-ml excludes FF (U+000C)."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\x0cworld"""')
+
+
+def test_reject_soh_in_multiline_string():
+    """ABNF unescaped-ml excludes SOH (U+0001)."""
+    with pytest.raises(GumError):
+        Tokenizer('"""hello\x01world"""')
+
+
+def test_tab_allowed_in_multiline_string():
+    """ABNF unescaped-ml explicitly allows HTAB."""
+    t = Tokenizer('"""hello\tworld"""')
+    tok = t.peek()
+    assert tok.type == TokenType.STRING
+    assert tok.value == "hello\tworld"

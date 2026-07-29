@@ -275,6 +275,13 @@ class Tokenizer:
                     self._take_char()
                 chars.append("\n")
             else:
+                code = ord(ch)
+                if (code <= 0x08 or (0x0B <= code <= 0x1F) or code == 0x7F):
+                    raise GumError(
+                        f"Control character U+{code:04X} must be escaped",
+                        self.line,
+                        self.col - 1,
+                    )
                 chars.append(ch)
         raise GumError("Unterminated multiline string", start_line, start_col)
 
