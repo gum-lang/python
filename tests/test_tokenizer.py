@@ -347,6 +347,28 @@ def test_explicit_positive_int():
     assert tok.value == "+42"
 
 
+def test_underscore_starting_bare_key():
+    """ABNF bare-key allows UNDERSCORE as first char, followed by anything."""
+    t = Tokenizer("_1")
+    tok = t.peek()
+    assert tok.type == TokenType.IDENT
+    assert tok.value == "_1"
+
+
+def test_underscore_starting_bare_key_multiple_digits():
+    t = Tokenizer("_42")
+    tok = t.peek()
+    assert tok.type == TokenType.IDENT
+    assert tok.value == "_42"
+
+
+def test_underscore_only_bare_key():
+    t = Tokenizer("_")
+    tok = t.peek()
+    assert tok.type == TokenType.IDENT
+    assert tok.value == "_"
+
+
 def test_underscore_separator():
     t = Tokenizer("1_000_000")
     tok = t.peek()
@@ -354,9 +376,12 @@ def test_underscore_separator():
     assert tok.value == "1_000_000"
 
 
-def test_underscore_invalid_leading():
-    with pytest.raises(GumError):
-        Tokenizer("_1000")
+def test_underscore_starting_ident():
+    """ABNF bare-key allows UNDERSCORE followed by DIGIT."""
+    t = Tokenizer("_1000")
+    tok = t.peek()
+    assert tok.type == TokenType.IDENT
+    assert tok.value == "_1000"
 
 
 def test_underscore_invalid_trailing():

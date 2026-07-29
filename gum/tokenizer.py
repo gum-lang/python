@@ -152,12 +152,6 @@ class Tokenizer:
         elif ch == "-" or ch == "+" or ("0" <= ch <= "9"):
             self._current = self._read_number_or_check_ident()
         elif ("A" <= ch <= "Z") or ("a" <= ch <= "z") or ch == "_":
-            if ch == "_" and self.pos + 1 < len(self.source) and "0" <= self.source[self.pos + 1] <= "9":
-                raise GumError(
-                    "Underscore cannot be leading",
-                    self.line,
-                    self.col,
-                )
             self._current = self._read_ident()
         else:
             raise GumError(
