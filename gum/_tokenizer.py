@@ -141,7 +141,7 @@ class Tokenizer:
                 self._advance()
                 self._advance()
                 return Token(TokenType.MULTILINE_STRING, "".join(result), start_line, start_col)
-            if self._peek() == "\\" and self.pos + 1 < len(self.source) and self.source[self.pos + 1] == "\\":
+            if self._peek() == "\\":
                 next_pos = self.pos + 1
                 while next_pos < len(self.source) and self.source[next_pos] in (" ", "\t"):
                     next_pos += 1
@@ -183,6 +183,9 @@ class Tokenizer:
 
         if self._peek() in ("+", "-"):
             self._advance()
+
+        if not self._peek().isdigit():
+            raise GumDecodeError("invalid number: no digits after sign", start_line, start_col)
 
         while self.pos < len(self.source) and self._peek().isdigit():
             self._advance()

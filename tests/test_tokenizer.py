@@ -708,3 +708,25 @@ def test_tokenize_scientific_notation():
     assert tokens[0].type == TokenTypeIter.FLOAT
     tokens = list(TokenizerIter("2.5E-3").tokenize())
     assert tokens[0].type == TokenTypeIter.FLOAT
+
+
+def test_tokenize_lone_plus_rejected():
+    with pytest.raises(GumDecodeError):
+        list(TokenizerIter("+").tokenize())
+
+
+def test_tokenize_lone_minus_rejected():
+    with pytest.raises(GumDecodeError):
+        list(TokenizerIter("-").tokenize())
+
+
+def test_tokenize_multiline_line_continuation():
+    tokens = list(TokenizerIter('"""hello \\ \nworld"""').tokenize())
+    assert tokens[0].type == TokenTypeIter.MULTILINE_STRING
+    assert tokens[0].value == "hello world"
+
+
+def test_tokenize_multiline_line_continuation_with_spaces():
+    tokens = list(TokenizerIter('"""hello \\   \nworld"""').tokenize())
+    assert tokens[0].type == TokenTypeIter.MULTILINE_STRING
+    assert tokens[0].value == "hello world"
