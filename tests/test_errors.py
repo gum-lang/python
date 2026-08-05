@@ -1,4 +1,5 @@
 from gum._errors import GumDecodeError
+from gum.tokenizer import GumError
 
 
 def test_gum_decode_error_attributes():
@@ -17,3 +18,14 @@ def test_gum_decode_error_str():
 
 def test_gum_decode_error_is_exception():
     assert issubclass(GumDecodeError, Exception)
+
+
+def test_gum_error_is_gum_decode_error():
+    assert GumError is GumDecodeError
+
+
+def test_gum_decode_error_compatible_attributes():
+    err = GumDecodeError("test", 10, 20)
+    assert err.message == "test"
+    assert err.line == 10
+    assert err.col == 20

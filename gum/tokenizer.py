@@ -18,6 +18,10 @@ from enum import Enum, auto
 from dataclasses import dataclass
 from typing import Optional
 
+from gum._errors import GumDecodeError
+
+GumError = GumDecodeError
+
 
 class TokenType(Enum):
     """Enumeration of all token types recognized by the tokenizer."""
@@ -46,15 +50,6 @@ class Token:
     value: str | None
     line: int
     col: int
-
-
-class GumError(Exception):
-    """Exception raised for tokenization and parsing errors with position info."""
-    def __init__(self, message: str, line: int, col: int) -> None:
-        self.message = message
-        self.line = line
-        self.col = col
-        super().__init__(f"{message} at line {line}, col {col}")
 
 
 class Tokenizer:

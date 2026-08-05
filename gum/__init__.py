@@ -65,13 +65,13 @@ def load(
         raise
 
 
-def dumps(data: dict[str, Any], *, indent: int = 2, bare_keys: bool = True) -> str:
+def dumps(data: dict[str, Any], indent: int = 2, bare_keys: bool = True) -> str:
     encoder = GumEncoder(indent=indent, bare_keys=bare_keys)
     return encoder.encode(data)
 
 
 def dump(
-    data: dict[str, Any], fp: TextIO, *, indent: int = 2, bare_keys: bool = True
+    data: dict[str, Any], fp: TextIO, indent: int = 2, bare_keys: bool = True
 ) -> None:
     encoder = GumEncoder(indent=indent, bare_keys=bare_keys)
     fp.write(encoder.encode(data))
@@ -110,43 +110,12 @@ class GumEncoder:
         self.bare_keys = bare_keys
 
     def encode(self, obj: dict[str, Any]) -> str:
-        if not obj:
-            return ""
-        lines: list[str] = []
-        for k, v in obj.items():
-            val_lines = self._serialize_value(v, 0)
-            key_str = self._format_key(k)
-            for i, line in enumerate(val_lines):
-                if i == 0:
-                    lines.append(f"{key_str} = {line}")
-                else:
-                    lines.append(line)
-        return "\n".join(lines) + "\n"
+        return serialize(obj, indent=self.indent, key_formatter=self._format_key)
 
     def _format_key(self, key: str) -> str:
         if self.bare_keys and _BARE_KEY_RE.match(key) and key not in _RESERVED_KEYS:
             return key
         return self._escape_string(key)
-
-    def _serialize_value(self, value: Any, depth: int) -> list[str]:
-        if value is None:
-            return ["null"]
-        if isinstance(value, bool):
-            return ["true" if value else "false"]
-        if isinstance(value, (int, float)):
-            return [str(value)]
-        if isinstance(value, str):
-            return [self._serialize_string(value)]
-        if isinstance(value, list):
-            return self._serialize_list(value, depth)
-        if isinstance(value, dict):
-            return self._serialize_dict(value, depth)
-        raise TypeError(f"Unsupported type: {type(value)}")
-
-    def _serialize_string(self, value: str) -> str:
-        if "\n" in value and '"""' not in value:
-            return '"""\n' + value + '"""'
-        return self._escape_string(value)
 
     def _escape_string(self, value: str) -> str:
         escaped: list[str] = []
@@ -171,21 +140,6 @@ class GumEncoder:
             else:
                 escaped.append(ch)
         return f'"{"".join(escaped)}"'
-
-    def _serialize_list(self, lst: list[Any], depth: int) -> list[str]:
-        if not lst:
-            return ["[]"]
-        simple = all(isinstance(v, (str, int, float, bool, type(None))) for v in lst)
-        if simple and len(lst) <= 4 and sum(len(str(v)) for v in lst) < 40:
-            inner = ", ".join(self._serialize_value(v, depth)[0] for v in lst)
-            return ["[" + inner + "]"]
-        lines: list[str] = ["["]
-        for v in lst:
-            val_lines = self._serialize_value(v, depth + 1)
-            for line in val_lines:
-                lines.append(" " * self.indent * (depth + 1) + line)
-        lines.append(" " * self.indent * depth + "]")
-        return lines
 
     def _serialize_dict(self, d: dict[str, Any], depth: int) -> list[str]:
         if not d:

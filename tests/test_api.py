@@ -239,3 +239,27 @@ def test_load_with_object_hook(tmp_path):
     p.write_text("count = 5\n")
     result = load(p, object_hook=hook)
     assert result == {"count": 10}
+
+
+def test_dumps_indent_positional():
+    result = dumps({"key": "value"}, 4)
+    assert 'key = "value"' in result
+
+
+def test_dump_indent_positional(tmp_path):
+    p = tmp_path / "config.gum"
+    data = {"name": "test"}
+    with open(p, "w") as f:
+        dump(data, f, 4)
+    result = load(p)
+    assert result == data
+
+
+def test_gum_decode_error_caught_as_gum_error():
+    with pytest.raises(GumDecodeError):
+        loads('"unclosed')
+
+
+def test_gum_error_caught_as_decode_error():
+    with pytest.raises(GumDecodeError):
+        loads("key = ")
