@@ -140,29 +140,3 @@ class GumEncoder:
             else:
                 escaped.append(ch)
         return f'"{"".join(escaped)}"'
-
-    def _serialize_dict(self, d: dict[str, Any], depth: int) -> list[str]:
-        if not d:
-            return ["{}"]
-        all_simple = all(
-            isinstance(v, (str, int, float, bool, type(None))) for v in d.values()
-        )
-        if all_simple and len(d) <= 3:
-            items: list[str] = []
-            for k, v in d.items():
-                key_str = self._format_key(k)
-                items.append(f"{key_str} = {self._serialize_value(v, depth)[0]}")
-            return ["{ " + ", ".join(items) + " }"]
-        lines: list[str] = ["{"]
-        for k, v in d.items():
-            val_lines = self._serialize_value(v, depth + 1)
-            key_str = self._format_key(k)
-            first = True
-            for line in val_lines:
-                if first:
-                    lines.append(" " * self.indent * (depth + 1) + f"{key_str} = {line}")
-                    first = False
-                else:
-                    lines.append(" " * self.indent * (depth + 1) + line)
-        lines.append(" " * self.indent * depth + "}")
-        return lines
