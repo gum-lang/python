@@ -730,3 +730,109 @@ def test_tokenize_multiline_line_continuation_with_spaces():
     tokens = list(TokenizerIter('"""hello \\   \nworld"""').tokenize())
     assert tokens[0].type == TokenTypeIter.MULTILINE_STRING
     assert tokens[0].value == "hello world"
+
+
+def test_tokenize_escape_backslash():
+    tokens = list(TokenizerIter(r'"C:\\path"').tokenize())
+    assert tokens[0].value == "C:\\path"
+
+
+def test_tokenize_escape_backspace():
+    tokens = list(TokenizerIter(r'"hello\bworld"').tokenize())
+    assert tokens[0].value == "hello\bworld"
+
+
+def test_tokenize_escape_formfeed():
+    tokens = list(TokenizerIter(r'"hello\fworld"').tokenize())
+    assert tokens[0].value == "hello\fworld"
+
+
+def test_tokenize_escape_carriage_return():
+    tokens = list(TokenizerIter(r'"hello\rworld"').tokenize())
+    assert tokens[0].value == "hello\rworld"
+
+
+def test_tokenize_escape_tab():
+    tokens = list(TokenizerIter(r'"hello\tworld"').tokenize())
+    assert tokens[0].value == "hello\tworld"
+
+
+def test_tokenize_escape_quote():
+    tokens = list(TokenizerIter(r'"say \"hello\""').tokenize())
+    assert tokens[0].value == 'say "hello"'
+
+
+def test_tokenize_unicode_8digit():
+    tokens = list(TokenizerIter(r'"\U0001F600"').tokenize())
+    assert tokens[0].value == "\U0001F600"
+
+
+def test_tokenize_invalid_escape_rejected():
+    with pytest.raises(GumDecodeError):
+        list(TokenizerIter(r'"hello\zworld"').tokenize())
+
+
+def test_tokenize_unicode_4digit_invalid_hex():
+    with pytest.raises(GumDecodeError):
+        list(TokenizerIter(r'"\uGGGG"').tokenize())
+
+
+def test_tokenize_multiline_dedent_mixed_indent():
+    src = '"""\n    hello\n  world\n"""'
+    tokens = list(TokenizerIter(src).tokenize())
+    assert tokens[0].type == TokenTypeIter.MULTILINE_STRING
+    # The iterator tokenizer's dedent keeps trailing newline when last line is whitespace-only
+    assert tokens[0].value == "    hello\n  world\n"
+
+
+def test_tokenize_empty_multiline_string():
+    tokens = list(TokenizerIter('""""""').tokenize())
+    assert tokens[0].type == TokenTypeIter.MULTILINE_STRING
+    assert tokens[0].value == ""
+
+
+def test_tokenize_multiline_string_only_newlines():
+    tokens = list(TokenizerIter('"""\n\n"""').tokenize())
+    assert tokens[0].type == TokenTypeIter.MULTILINE_STRING
+    # The dedent algorithm keeps the middle newline since it's not whitespace-only after split
+    assert tokens[0].value == "\n"
+
+
+def test_tokenize_crlf_in_multiline():
+    """The iterator tokenizer preserves CRLF in multiline strings (main tokenizer normalizes)."""
+    tokens = list(TokenizerIter('"""hello\r\nworld"""').tokenize())
+    assert tokens[0].value == "hello\r\nworld"
+
+
+def test_tokenize_number_with_all_segments():
+    """The iterator tokenizer does not support underscores in numbers (main tokenizer does)."""
+    tokens = list(TokenizerIter("1000.25e10").tokenize())
+    assert tokens[0].type == TokenTypeIter.FLOAT
+    assert tokens[0].value == "1000.25e10"
+
+
+def test_tokenize_positive_sign_number():
+    tokens = list(TokenizerIter("+42").tokenize())
+    assert tokens[0].type == TokenTypeIter.INTEGER
+    assert tokens[0].value == "+42"
+
+
+def test_tokenize_negative_sign_number():
+    tokens = list(TokenizerIter("-42").tokenize())
+    assert tokens[0].type == TokenTypeIter.INTEGER
+    assert tokens[0].value == "-42"
+
+
+def test_tokenize_bare_key_cannot_be_true():
+    with pytest.raises(GumDecodeError):
+        Tokenizer("true = 1").expect(TokenType.IDENT)
+
+
+def test_tokenize_bare_key_cannot_be_false():
+    with pytest.raises(GumDecodeError):
+        Tokenizer("false = 1").expect(TokenType.IDENT)
+
+
+def test_tokenize_bare_key_cannot_be_null():
+    with pytest.raises(GumDecodeError):
+        Tokenizer("null = 1").expect(TokenType.IDENT)
