@@ -6,7 +6,7 @@ from typing import IO, Any, Callable, TextIO
 
 from gum._errors import GumDecodeError
 from gum.parser import Parser
-from gum.serializer import serialize
+from gum.serializer import _serialize_string, serialize
 from gum.tokenizer import GumError, Tokenizer
 
 _BARE_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -29,7 +29,7 @@ def loads(
     *,
     object_pairs_hook: Callable[[list[tuple[str, Any]]], Any] | None = None,
     object_hook: Callable[[dict[str, Any]], Any] | None = None,
-) -> dict[str, Any]:
+) -> Any:
     decoder = GumDecoder(
         object_pairs_hook=object_pairs_hook,
         object_hook=object_hook,
@@ -42,7 +42,7 @@ def load(
     *,
     object_pairs_hook: Callable[[list[tuple[str, Any]]], Any] | None = None,
     object_hook: Callable[[dict[str, Any]], Any] | None = None,
-) -> dict[str, Any]:
+) -> Any:
     filename: str | None = None
     if isinstance(fp, Path):
         source = fp.read_text()
@@ -65,13 +65,13 @@ def load(
         raise
 
 
-def dumps(data: dict[str, Any], indent: int = 2, bare_keys: bool = True) -> str:
+def dumps(data: Any, indent: int = 2, bare_keys: bool = True) -> str:
     encoder = GumEncoder(indent=indent, bare_keys=bare_keys)
     return encoder.encode(data)
 
 
 def dump(
-    data: dict[str, Any], fp: TextIO, indent: int = 2, bare_keys: bool = True
+    data: Any, fp: TextIO, indent: int = 2, bare_keys: bool = True
 ) -> None:
     encoder = GumEncoder(indent=indent, bare_keys=bare_keys)
     fp.write(encoder.encode(data))
@@ -87,7 +87,7 @@ class GumDecoder:
         self.object_pairs_hook = object_pairs_hook
         self.object_hook = object_hook
 
-    def decode(self, s: str) -> dict[str, Any]:
+    def decode(self, s: str) -> Any:
         result = Parser(Tokenizer(s)).parse()
         return self._apply_hooks(result)
 
@@ -109,7 +109,7 @@ class GumEncoder:
         self.indent = indent
         self.bare_keys = bare_keys
 
-    def encode(self, obj: dict[str, Any]) -> str:
+    def encode(self, obj: Any) -> str:
         return serialize(obj, indent=self.indent, key_formatter=self._format_key)
 
     def _format_key(self, key: str) -> str:
@@ -118,25 +118,4 @@ class GumEncoder:
         return self._escape_string(key)
 
     def _escape_string(self, value: str) -> str:
-        escaped: list[str] = []
-        for ch in value:
-            code = ord(ch)
-            if code == 0x5C:
-                escaped.append("\\\\")
-            elif code == 0x22:
-                escaped.append('\\"')
-            elif code == 0x08:
-                escaped.append("\\b")
-            elif code == 0x0C:
-                escaped.append("\\f")
-            elif code == 0x0A:
-                escaped.append("\\n")
-            elif code == 0x0D:
-                escaped.append("\\r")
-            elif code == 0x09:
-                escaped.append("\\t")
-            elif code < 0x20 or code == 0x7F:
-                escaped.append(f"\\u{code:04x}")
-            else:
-                escaped.append(ch)
-        return f'"{"".join(escaped)}"'
+        return _serialize_string(value)

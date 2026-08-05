@@ -242,17 +242,19 @@ def test_load_with_object_hook(tmp_path):
 
 
 def test_dumps_indent_positional():
-    result = dumps({"key": "value"}, 4)
-    assert 'key = "value"' in result
+    result = dumps({"tbl": {"a": 1, "b": 2, "c": 3, "d": 4}}, 4)
+    lines = result.splitlines()
+    assert any(line.startswith("    a = 1") for line in lines)
 
 
 def test_dump_indent_positional(tmp_path):
     p = tmp_path / "config.gum"
-    data = {"name": "test"}
+    data = {"tbl": {"a": 1, "b": 2, "c": 3, "d": 4}}
     with open(p, "w") as f:
         dump(data, f, 4)
-    result = load(p)
-    assert result == data
+    result = p.read_text()
+    assert any(line.startswith("    a = 1") for line in result.splitlines())
+    assert load(p) == data
 
 
 def test_gum_decode_error_caught_as_gum_error():
