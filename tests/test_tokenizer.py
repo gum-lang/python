@@ -1,5 +1,6 @@
 import pytest
 from gum.tokenizer import Tokenizer, TokenType, GumError
+from gum._errors import GumDecodeError
 
 
 def test_empty():
@@ -606,3 +607,104 @@ def test_tab_allowed_in_comment():
     assert t.peek().type == TokenType.NEWLINE
     t.advance()
     assert t.peek().type == TokenType.IDENT
+
+
+# Tests for _tokenizer (iterator-based API)
+from gum._tokenizer import Tokenizer as TokenizerIter
+from gum._tokenizer import TokenType as TokenTypeIter
+
+
+def test_tokenize_bare_key():
+    tokens = list(TokenizerIter("name").tokenize())
+    assert tokens[0].type == TokenTypeIter.BARE_KEY
+    assert tokens[0].value == "name"
+    assert tokens[-1].type == TokenTypeIter.EOF
+
+
+def test_tokenize_quoted_string():
+    tokens = list(TokenizerIter('"hello world"').tokenize())
+    assert tokens[0].type == TokenTypeIter.QUOTED_STRING
+    assert tokens[0].value == "hello world"
+
+
+def test_tokenize_integer():
+    tokens = list(TokenizerIter("42").tokenize())
+    assert tokens[0].type == TokenTypeIter.INTEGER
+    assert tokens[0].value == "42"
+
+
+def test_tokenize_float():
+    tokens = list(TokenizerIter("3.14").tokenize())
+    assert tokens[0].type == TokenTypeIter.FLOAT
+    assert tokens[0].value == "3.14"
+
+
+def test_tokenize_true_false_null():
+    for text, expected in [("true", TokenTypeIter.TRUE), ("false", TokenTypeIter.FALSE), ("null", TokenTypeIter.NULL)]:
+        tokens = list(TokenizerIter(text).tokenize())
+        assert tokens[0].type == expected
+
+
+def test_tokenize_symbols():
+    tests = [
+        ("=", TokenTypeIter.EQUALS),
+        (",", TokenTypeIter.COMMA),
+        ("{", TokenTypeIter.LBRACE),
+        ("}", TokenTypeIter.RBRACE),
+        ("[", TokenTypeIter.LBRACKET),
+        ("]", TokenTypeIter.RBRACKET),
+        (".", TokenTypeIter.DOT),
+    ]
+    for text, expected in tests:
+        tokens = list(TokenizerIter(text).tokenize())
+        assert tokens[0].type == expected
+
+
+def test_tokenize_skips_whitespace():
+    tokens = list(TokenizerIter("  name  ").tokenize())
+    non_ws = [t for t in tokens if t.type != TokenTypeIter.EOF]
+    assert len(non_ws) == 1
+    assert non_ws[0].value == "name"
+
+
+def test_tokenize_skips_comments():
+    tokens = list(TokenizerIter("# comment\nname").tokenize())
+    non_comment = [t for t in tokens if t.type not in (TokenTypeIter.EOF,)]
+    bare_keys = [t for t in non_comment if t.type == TokenTypeIter.BARE_KEY]
+    assert len(bare_keys) == 1
+
+
+def test_tokenize_string_escapes():
+    tokens = list(TokenizerIter(r'"hello\nworld"').tokenize())
+    assert tokens[0].value == "hello\nworld"
+
+
+def test_tokenize_bom():
+    tokens = list(TokenizerIter("\ufeffname").tokenize())
+    assert tokens[0].type == TokenTypeIter.BARE_KEY
+    assert tokens[0].value == "name"
+
+
+def test_tokenize_line_col():
+    tokens = list(TokenizerIter("name\nother").tokenize())
+    name_token = [t for t in tokens if t.value == "other"][0]
+    assert name_token.lineno == 2
+
+
+def test_tokenize_unclosed_string():
+    with pytest.raises(GumDecodeError):
+        list(TokenizerIter('"unclosed').tokenize())
+
+
+def test_tokenize_multiline_string():
+    tokens = list(TokenizerIter('"""hello\nworld"""').tokenize())
+    assert tokens[0].type == TokenTypeIter.MULTILINE_STRING
+    assert "hello" in tokens[0].value
+    assert "world" in tokens[0].value
+
+
+def test_tokenize_scientific_notation():
+    tokens = list(TokenizerIter("1e10").tokenize())
+    assert tokens[0].type == TokenTypeIter.FLOAT
+    tokens = list(TokenizerIter("2.5E-3").tokenize())
+    assert tokens[0].type == TokenTypeIter.FLOAT
