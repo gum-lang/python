@@ -270,6 +270,24 @@ class Tokenizer:
                 )
             ch = self._take_char()
             if ch == "\\":
+                # Check for line continuation: \ followed by optional whitespace then newline
+                next_pos = self.pos
+                while next_pos < len(self.source) and self.source[next_pos] in (" ", "\t"):
+                    next_pos += 1
+                if next_pos < len(self.source) and self.source[next_pos] in ("\n", "\r"):
+                    # Line continuation: skip backslash, whitespace, and newline
+                    while self.pos < len(self.source) and self.source[self.pos] in (" ", "\t"):
+                        self._take_char()
+                    if self.pos < len(self.source) and self.source[self.pos] == "\n":
+                        self._take_char()
+                    elif (
+                        self.pos + 1 < len(self.source)
+                        and self.source[self.pos] == "\r"
+                        and self.source[self.pos + 1] == "\n"
+                    ):
+                        self._take_char()
+                        self._take_char()
+                    continue
                 ch = self._read_escape()
                 chars.append(ch)
             elif ch == "\r":
@@ -380,6 +398,16 @@ class Tokenizer:
                 return chr(int(hex_str, 16))
             except ValueError:
                 raise GumError(f"Invalid unicode escape: \\u{hex_str}", self.line, self.col)
+        if ch == "U":
+            hex_str = ""
+            for _ in range(8):
+                if self.pos >= len(self.source):
+                    raise GumError("Unterminated unicode escape", self.line, self.col)
+                hex_str += self._take_char()
+            try:
+                return chr(int(hex_str, 16))
+            except ValueError:
+                raise GumError(f"Invalid unicode escape: \\U{hex_str}", self.line, self.col)
         if ch in mapping:
             return mapping[ch]
         raise GumError(f"Invalid escape sequence: \\{ch}", self.line, self.col)

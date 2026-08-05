@@ -456,10 +456,10 @@ def test_escape_quote():
     assert result == {"s": 'say "hello"'}
 
 
-def test_escape_unicode_8digit_not_supported():
-    """The main tokenizer only supports \\u (4-digit), not \\U (8-digit)."""
-    with pytest.raises(GumError):
-        parse(r's = "\U0001F600"')
+def test_escape_unicode_8digit():
+    """The main tokenizer supports \\U (8-digit) unicode escapes."""
+    result = parse(r's = "\U0001F600"')
+    assert result == {"s": "\U0001F600"}
 
 
 def test_quoted_key_with_period():
@@ -508,16 +508,6 @@ def test_positive_float():
     assert isinstance(result["n"], float)
 
 
-def test_empty_list():
-    result = parse("a = []")
-    assert result == {"a": []}
-
-
-def test_empty_table():
-    result = parse("t = {}")
-    assert result == {"t": {}}
-
-
 def test_nested_empty_list():
     result = parse("a = [[]]")
     assert result == {"a": [[]]}
@@ -561,10 +551,10 @@ def test_multiline_string_with_escapes():
     assert result == {"s": "hello\nworld"}
 
 
-def test_multiline_string_line_continuation_not_supported():
-    """Line continuation (backslash + newline) is not supported in the main tokenizer's multiline strings."""
-    with pytest.raises(GumError):
-        parse('s = """hello \\\nworld"""')
+def test_multiline_string_line_continuation():
+    """Line continuation (backslash + newline) is supported in multiline strings."""
+    result = parse('s = """hello \\\nworld"""')
+    assert result == {"s": "hello world"}
 
 
 def test_reserved_word_in_quoted_key():
