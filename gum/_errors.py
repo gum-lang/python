@@ -1,5 +1,23 @@
 class GumDecodeError(Exception):
-    """Exception raised when parsing or tokenizing gum markup fails."""
+    """Exception raised when parsing or tokenizing gum markup fails.
+
+    Provides line and column information for error reporting.
+    Error messages follow the format: "{message} (line {line}, column {col})"
+
+    Attributes:
+        msg: The error message without position information.
+        lineno: The line number where the error occurred (1-indexed).
+        colno: The column number where the error occurred (1-indexed).
+        message: Alias for msg (for backward compatibility).
+        line: Alias for lineno (for backward compatibility).
+        col: Alias for colno (for backward compatibility).
+
+    Example:
+        >>> try:
+        ...     gum.loads('key = "unterminated')
+        ... except GumDecodeError as e:
+        ...     print(f"Error at line {e.line}, column {e.col}: {e.msg}")
+    """
 
     def __init__(self, msg: str, lineno: int, colno: int) -> None:
         self.msg = msg
